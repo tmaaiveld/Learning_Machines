@@ -34,25 +34,27 @@ class EpisodeData:
         self.sens = pd.DataFrame(columns=sens_names)
         self.pos = pd.DataFrame(columns=['x', 'y', 'z'])
         self.reward = pd.Series()
-
+        
         self.Q = pd.DataFrame(columns=actions)
+        self.Q_targets = pd.DataFrame(columns=actions)
         self.wheels = pd.DataFrame(columns=['left', 'right'])
         self.action = pd.Series()
 
         self.win = False
         self.win_coordinates = win_coordinates
 
-    def update(self, i, S, step_Q, reward):
+    def update(self, i, S, step_Q, step_Q_targets, step_pos, reward):
         """
         :param step_sens: IR sensor readings at a given time step.
         :param step_pos: simulation position readings
         :return: updated parameters.
         """
-        print(S[:-3])
-        print(self.sens)
-        self.sens.loc[i] = S[:-3]
-        self.pos.loc[i] = S[-3:]
+
+        self.sens.loc[i] = S
+        # self.pos.loc[i] = S[-3:]
         self.Q.loc[i] = step_Q
+        self.Q_targets.loc[i] = step_Q_targets
+        self.pos.loc[i] = step_pos
         self.reward.loc[i] = reward
 
     def terminate(self):
