@@ -56,8 +56,6 @@ class EpisodeData:
 
     def terminate(self):
         # self.win = (self.win_coordinates in self.pos)  # probably won't work yet
-
-
         self.action = self.Q.idxmax(axis=1)
 
 

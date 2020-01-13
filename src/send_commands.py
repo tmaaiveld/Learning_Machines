@@ -3,6 +3,10 @@ Current approach:
 Q-L with NN
 ...
 
+tommy's todo's:
+- change reward / Q_target to only generate Q_targets after learning episode
+    > that way I can modify the rewards much more before assigning them
+
 todo's
 - Review more literature and previous work on how to solve many of these problems...
 - adapting reward structure
@@ -15,6 +19,7 @@ todo's
       seem sensible, as the robot usually detects a wall about 3 steps from crashing into it
 - Improving neural network
     > loss could (should?) be redefined as squared distance of the changed Q-value only
+    > if the rewards are normalised between 0 and 1, you could use other types of layer like sigmoid to map values
 - Experiments: Time alive over episodes of the algorithm?
 - Fun / easy to test: different types of action configurations.
     > could encode action step size (STEP_SIZE_MS) as parameter in action? Then the robot can learn for itself when to
@@ -72,8 +77,10 @@ def terminate_program(signal_number, frame):
 
 def start_simulation(rob):
     try:
-        time.sleep(0.1)
+        time.sleep(5)
         rob.play_simulation()
+        time.sleep(5)
+        np.array(rob.position())
 
     except:
         print("Simulation startup failed. Retrying...")
@@ -91,7 +98,7 @@ def e_greedy_action(Q, A, e=0.1):
 
 def e_greedy(Q, e=0.1):
     if random.random() < e:
-        return random.randint(0,len(Q)-1)
+        return random.randint(0, len(Q)-1)
     else:
         return np.random.choice(np.where(Q == Q.max())[0])
 
@@ -102,12 +109,12 @@ def main():
 
     EP_COUNT = 100
     STEP_COUNT = 50
-    STEP_SIZE_MS = 500
-    CRASH_SENSOR_BOUNDARY = -0.43  # negative for simulation, positive for RW. Not used right now
-    CRASH_POSITION_BOUNDARY = 0.02
+    STEP_SIZE_MS = 250
+    CRASH_SENSOR_BOUNDARY = -0.45  # negative for simulation, positive for RW. Not used right now
+    CRASH_POSITION_BOUNDARY = 0.005
 
     A = [(20,20), (0,20), (20,0)]#, (10,5), (5,10)]  # (-25,-25),
-    epsilon = 0.1
+    epsilon = 0.25
     epsilon_decaying = 0.5
     gamma = 0.1
     recency_factor = 0.01  # higher parameter setting -> forget older information faster
@@ -119,8 +126,8 @@ def main():
     # Initialize the robot -> SET THESE PARAMETERS!
     hardware = False
     # nn_from_file = True if input('Would you like to use a pre-trained neural network? (y/n') == 'y' else False
-    nn_from_file = True
-    learning = False  # Disable this if you want to run a pre-trained network
+    nn_from_file = False
+    learning = True  # Disable this if you want to run a pre-trained network
     if nn_from_file is True:
         print('loading network, disabling learning...')
         learning = False
@@ -128,7 +135,7 @@ def main():
     if hardware:
         rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
     else:
-        rob = robobo.SimulationRobobo().connect(address='172.20.10.3', port=19997)
+        rob = robobo.SimulationRobobo().connect(address='145.108.230.181', port=19997)
         rob.stop_world()
         time.sleep(0.1)
 
@@ -147,7 +154,10 @@ def main():
         data = EpisodeData(ACTION_NAMES, sens_names=SENS_NAMES)
 
         signal.signal(signal.SIGINT, terminate_program)
-        start_simulation(rob)
+        # start_simulation(rob)
+        time.sleep(5)
+        rob.play_simulation()
+        time.sleep(5)
 
         ### INITIALIZATION ###
         print('\n--- episode {} ---'.format(episode + 1))
@@ -176,8 +186,8 @@ def main():
             # move the robot
             rob.move(wheels['left'], wheels['right'], STEP_SIZE_MS)
 
-            if learning:
-                time.sleep(STEP_SIZE_MS/1000)
+            # if learning:
+            #     time.sleep(STEP_SIZE_MS/1000)
 
             ### OBSERVING NEXT STATE ###
             S_prime = np.log(np.array(rob.read_irs()))
@@ -202,7 +212,8 @@ def main():
             if not crashed:
                 # reward = 1 + min(S) * proximity_factor  # - (wheels == A[1])
                 # see Eiben et al. for this formula
-                reward = s_trans * (1 - 0.9 * (s_rot / 20)) * (1 - (min(S_prime[3:]) / -0.65))
+                reward = s_trans * (1 - 0.9 * (s_rot / 20)) * (1 - (min(S_prime[3:]) / (5 * -0.065)))
+                # reward = s_trans * (1 - (s_rot/20)) * (1 - (min(S_prime[3:]) / (-0.65)))
             else:
                 reward = -400
 
@@ -272,9 +283,10 @@ def main():
         rob.sleep(1)
 
         if crashed or episode == EP_COUNT:
-            save_nn(model)
+            # if learning:
+                save_nn(model)
             print('Robot crashed, resetting simulation...')
-            data.terminate(crashed)
+            data.terminate()
             # could implement something here to save the experience if resetting the simulation!
 
         if crashed:
