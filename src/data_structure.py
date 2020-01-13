@@ -40,9 +40,6 @@ class EpisodeData:
         self.wheels = pd.DataFrame(columns=['left', 'right'])
         self.action = pd.Series()
 
-        # self.win = False
-        # self.win_coordinates = win_coordinates
-
     def update(self, i, S, step_Q, step_Q_targets, reward): # step_pos removed
         """
         :param step_sens: IR sensor readings at a given time step.
@@ -59,4 +56,8 @@ class EpisodeData:
 
     def terminate(self):
         # self.win = (self.win_coordinates in self.pos)  # probably won't work yet
+
+
         self.action = self.Q.idxmax(axis=1)
+
+

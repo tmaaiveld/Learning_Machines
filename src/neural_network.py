@@ -1,23 +1,35 @@
 from keras.models import Sequential
-from keras.layers import Dense, Activation, Dropout
-from keras.optimizers import RMSprop, Adam
+from keras.layers import Dense, Dropout
+from keras.models import model_from_json
 
 
-def init_nn(input_dims, output_dims, nn_dims):
+def init_nn(input_dims, output_dims, hidden_layers, from_file):
 
-    model = Sequential()
+    if not from_file:
+        model = Sequential()
 
-    model.add(Dense(nn_dims[0], input_dim=input_dims, activation='linear'))
-    model.add(Dropout(0.2))
+        model.add(Dense(hidden_layers[0], input_dim=input_dims, activation='linear'))
+        model.add(Dropout(0.2))
 
-    model.add(Dense(nn_dims[1], activation='linear'))
-    model.add(Dropout(0.2))
+        model.add(Dense(hidden_layers[1], activation='linear'))
+        model.add(Dropout(0.2))
 
-    model.add(Dense(output_dims, activation='linear'))
+        model.add(Dense(output_dims, activation='linear'))
+        print("Initialized new model, compiling...")
+
+    else:
+        json_file = open('model.json', 'r')
+        loaded_model_json = json_file.read()
+        json_file.close()
+        model = model_from_json(loaded_model_json)
+        # load weights into new model
+        model.load_weights("model.h5")
+        print("Loaded model from disk, compiling...")
 
     model.compile(loss='MSE', optimizer='adam')
 
     return model
+
 
 
 
