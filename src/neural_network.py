@@ -38,10 +38,6 @@ def init_nn_EC(input_dims, output_dims, weights):
 
     model = Sequential()
     model.add(Dense(output_dims, input_dim=input_dims, weights=weights, activation='tanh'))
-
-    print(model.get_weights())
-
-    print("Initialized new model...")
     return model
 
 
