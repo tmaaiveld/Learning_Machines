@@ -1,5 +1,5 @@
-from keras.models import Sequential
-from keras.layers import Dense, Dropout
+from keras.models import Model, Sequential
+from keras.layers import Dense, Dropout, Activation
 from keras.models import model_from_json
 
 
@@ -31,38 +31,25 @@ def init_nn(input_dims, output_dims, hidden_layers, from_file):
     return model
 
 
+def init_nn_EC(input_dims, output_dims, weights):
+    """Initialize the neural network for the ES implementation."""
+    # inputLayer = Dense(input_dim=input_dims, activation='linear')
+    # outputLayer = Dense(output_dims, activation='tanh', weights=weights)(inputLayer)
+
+    model = Sequential()
+    model.add(Dense(output_dims, input_dim=input_dims, weights=weights, activation='tanh'))
+
+    print(model.get_weights())
+
+    print("Initialized new model...")
+    return model
 
 
-
-# def neural_net(num_sensors, params, optimizer='rms', load=''):
-#
-#     model = Sequential()
-#
-#     # First layer.
-#     model.add(Dense(
-#         params[0], init='lecun_uniform', input_shape=(num_sensors,)
-#     ))
-#     model.add(Activation('relu'))
-#     model.add(Dropout(0.2))
-#
-#     # Second layer.
-#     model.add(Dense(params[1], init='lecun_uniform'))
-#     model.add(Activation('relu'))
-#     model.add(Dropout(0.2))
-#
-#     # Output layer.
-#     model.add(Dense(4, init='lecun_uniform')) #actions 4: forward, back, left, right
-#     model.add(Activation('linear'))
-#
-#     if optimizer == 'rms':
-#         opt = RMSprop()
-#
-#     elif optimizer == 'adam':
-#         opt = Adam()
-#
-#     model.compile(loss='mse', optimizer=opt)
-#
-#     if load:
-#         model.load_weights(load)
-#
-#     return model
+def save_nn(model, path):
+    # serialize model to JSON
+    model_json = model.to_json()
+    with open(path + ".json", "w") as json_file:
+        json_file.write(model_json)
+    # serialize weights to HDF5
+    model.save_weights(filepath=path + ".h5")
+    print("Saved final NN to disk")

@@ -1,5 +1,5 @@
 """
-Data structure file for send_commands.py. Needs some work, probably better to put it all
+Data structure file for send_commands_Q.py. Needs some work, probably better to put it all
 in one dataframe.
 """
 
