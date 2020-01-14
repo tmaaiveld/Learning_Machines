@@ -31,16 +31,20 @@ actions = {'forward': (30.0, 30.0),
 
 hardware = False
 port = 19997
+kill_on_crash = False
+base_name = "experiments"
+if kill_on_crash:
+	base_name += "_killoncrash"
+base_name += "_port"+str(port)
 
 n_hidden_neurons = 10
 
 step_size_ms = 250
-sim_length_s = 60
-kill_on_crash = True
+sim_length_s = 30.0
 
 dom_u = 1
 dom_l = -1
-npop = 10
+npop = 20
 gens = 10
 mutation = 0.05
 last_best = 0
@@ -83,19 +87,17 @@ def eval(x):
 		rob.move(left, right, step_size_ms)
 		elapsed_time += step_size_ms
 		crashed, last_position = detect_crash(rob, input, last_position)
-		#if not crashed:
-		fitness += get_fitness(left, right, input)
-		print("Total Fitness: "+str(fitness))
-		#else:
-
-			# Penalize crash according to remaining duration
-		#	fitness = -((sim_length_ms - elapsed_time) * 10) + fitness
-		#	print("penalizing with:"+str(fitness))
-			# Penalize by ending the episode early			
-			#break
+		if not crashed:
+			fitness += get_fitness(left, right, input)
+			print("Total Fitness: "+str(fitness))
+		else:
+			if kill_on_crash:
+				# Penalize by ending the episode early
+				print("Robot crashed, ending eposide")			
+				break
 			# Penalize by giving no fitness
-			#print("Penalizing crash with no fitness")
-			#pass
+			print("Penalizing crash with no fitness")
+			pass
 	print("Evaluation done, final fitness:"+str(fitness))
 	print("--------------------------")
 	rob.stop_world()
@@ -110,7 +112,7 @@ def eval(x):
 def detect_crash(rob, input, last_position):
 	current_position = np.array(rob.position())
 	sensor_bound = -4
-	position_bound = .01
+	position_bound = .001
 	print("last position: "+str(last_position))
 	print("current position: "+str(current_position))
 	dist = np.linalg.norm(last_position - current_position)
@@ -122,7 +124,7 @@ def detect_crash(rob, input, last_position):
 
 def get_fitness(left, right, input):
 	s_trans = left + right
-	rot_max = 20  # from (0,20)
+	rot_max = 30  # from (0,20)
 	rot_min = 0   # (30,30)
 	# Normalized rotation
 	s_rot = float((abs(left - right) - rot_min) / (rot_max - rot_min))
@@ -196,8 +198,8 @@ class player_controller(Controller):
 		return action
 
 
-selections = {#"NSGA2": tools.selNSGA2,
-              "Tournament": tools.selTournament}
+selections = {"NSGA2": tools.selNSGA2}#,
+#              "Tournament": tools.selTournament}
 
 for selection in selections.keys():
 
@@ -212,7 +214,7 @@ for selection in selections.keys():
 	# n_hidden = 50
 	# n_vars = (num_sensors()+1)*n_hidden + (n_hidden+1)*5 # multilayer with 50 neurons
 
-	experiment_name = "experiments_port"+str(port)+"_" + selection+"/"
+	experiment_name = base_name+"_" + selection+"/"
 	if not os.path.exists(experiment_name):
 		os.makedirs(experiment_name)
 	else:
@@ -249,6 +251,7 @@ for selection in selections.keys():
 		if not os.path.exists(experiment_name_new):
 			os.makedirs(experiment_name_new)
 		elif len(os.listdir(experiment_name_new)) > 0:
+			print("listdir: ",os.listdir(experiment_name_new))
 			recovery = True
 		if recovery_mode:
 			print("------------\nRECOVERY")
@@ -270,7 +273,7 @@ for selection in selections.keys():
 			fits_old = [(float(x.replace(".json","")),) for x in ls if "all_data" not in x]	
 	
 			print("LENGTH pop old:"+str(len(population_old)))
-			if len(population_old) >= gens:
+			if len(population_old) >= npop:
 				print("Skipping generation "+str(gen))
 				population = population_old
 				recovery_mode = False
@@ -290,9 +293,9 @@ for selection in selections.keys():
 		for fit, ind in zip(fits, offspring):
 			ind.fitness.values = fit
 		if selection == "NSGA2":
-			population = toolbox.select(offspring+population, k=npop)
+			population = toolbox.select(offspring, k=npop)
 		elif selection == "Tournament":
-			population = toolbox.select(offspring+population, k=npop, tournsize=3)
+			population = toolbox.select(offspring, k=npop, tournsize=3)
 		best = tools.selBest(population, k=1)
 
 		record = stats.compile(population)
