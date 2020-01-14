@@ -10,14 +10,16 @@ import robobo
 import numpy as np
 import pickle as pkl
 import os
+import json 
+import codecs
 import signal
 np.set_printoptions(suppress=True, formatter={'float_kind':'{:0.2f}'.format})
 
-actions = {'forward': (30, 30),
-           'left': (10, 20),
-           'right': (20, 10),
-           'sharp left': (10, 30),
-           'sharp right': (30, 10)
+actions = {'forward': (30.0, 30.0),
+           'left': (10.0, 20.0),
+           'right': (20.0, 10.0),
+           'sharp left': (10.0, 30.0),
+           'sharp right': (30.0, 10.0)
            }  # 'backward': (-25,-25)
 
 #actions = {'forward': (40, 40),
@@ -28,7 +30,24 @@ actions = {'forward': (30, 30),
 #           }  # 'backward': (-25,-25)
 
 hardware = False
-port = 20001
+port = 19997
+
+n_hidden_neurons = 10
+
+step_size_ms = 250
+sim_length_s = 60
+kill_on_crash = True
+
+dom_u = 1
+dom_l = -1
+npop = 10
+gens = 10
+mutation = 0.05
+last_best = 0
+cross_prob = 0.5
+start_pop = 0
+recovery_mode = False
+
 if hardware:
 	rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
 else:
@@ -40,7 +59,6 @@ def eval(x):
 	global experiment_name
 	global gen
 	print("starting evaluation")
-	sim_length_s = 60
 
 	signal.signal(signal.SIGINT, terminate_program)
 	# start_simulation(rob)
@@ -67,18 +85,23 @@ def eval(x):
 		crashed, last_position = detect_crash(rob, input, last_position)
 		#if not crashed:
 		fitness += get_fitness(left, right, input)
-		print("Fitness: "+str(get_fitness(left, right, input)))
 		print("Total Fitness: "+str(fitness))
 		#else:
 
 			# Penalize crash according to remaining duration
 		#	fitness = -((sim_length_ms - elapsed_time) * 10) + fitness
 		#	print("penalizing with:"+str(fitness))
-		#	break
+			# Penalize by ending the episode early			
+			#break
+			# Penalize by giving no fitness
+			#print("Penalizing crash with no fitness")
+			#pass
 	print("Evaluation done, final fitness:"+str(fitness))
 	print("--------------------------")
 	rob.stop_world()
-	np.savetxt(experiment_name_new+str(int(fitness))+".txt",np.array(x))
+	# np.savetxt(experiment_name_new+str(int(fitness))+".txt",np.array(x))
+	json_file = experiment_name_new+str(int(fitness))+".json"
+	json.dump(x,codecs.open(json_file, "w", encoding="utf-8"), indent = 4)
 	file_fit = open(experiment_name + 'results.txt', 'a')
 	file_fit.write('\n' + str(gen) + ' ' + str(round(fitness, 6)))
 	file_fit.close()
@@ -102,17 +125,32 @@ def get_fitness(left, right, input):
 	rot_max = 20  # from (0,20)
 	rot_min = 0   # (30,30)
 	# Normalized rotation
-	s_rot = (abs(left - right) - rot_min) / (rot_max - rot_min)
-	v_max = 7
-	v_min = 0
+	s_rot = float((abs(left - right) - rot_min) / (rot_max - rot_min))
+	v_max = 0
+	v_min = -35
 	v_sens = (sum(input[3:]) - v_min) / (v_max - v_min)
-	fit = s_trans * (1-s_rot) * (1 - v_sens)
+	print("")
+	print("Fitness: ")
+	print("s_trans "+str(s_trans))
+	print("s_rot "+str(s_rot))
+	print("v_sens "+str(v_sens))
+	fit = s_trans * (1-s_rot) * (v_sens)
+	print("total: "+str(fit))
+	print("")	
 	return fit
 
 def terminate_program(signal_number, frame):
 	print("Ctrl-C received, terminating program\n\n")
 	sys.exit(1)
 
+
+def initIndividual(icls, content):
+    return icls(content)
+
+def initPopulation(pcls, ind_init, filename):
+    with open(filename, "r") as pop_file:
+        contents = json.load(pop_file)
+    return pcls(ind_init(c) for c in contents)
 
 def sigmoid_activation(x):
 	return 1. / (1. + np.exp(-x))
@@ -157,23 +195,11 @@ class player_controller(Controller):
 		action = actions.keys()[ind]
 		return action
 
-n_hidden_neurons = 10
-step_size_ms = 250
 
 selections = {#"NSGA2": tools.selNSGA2,
               "Tournament": tools.selTournament}
 
 for selection in selections.keys():
-
-	dom_u = 1
-	dom_l = -1
-	npop = 10
-	gens = 10
-	mutation = 0.05
-	last_best = 0
-	cross_prob = 0.5
-	start_pop = 0
-	recovery_mode = False
 
 	this_selection = selections[selection]
 	# number of weights for multilayer with 10 hidden neurons
@@ -217,22 +243,56 @@ for selection in selections.keys():
 
 	population = toolbox.population(n=npop)
 	i = 0
+
 	for gen in range(gens):
 		experiment_name_new = experiment_name + "gen_" + str(gen) + "/"
 		if not os.path.exists(experiment_name_new):
 			os.makedirs(experiment_name_new)
-		else:
-			if os.listdir(experiment_name_new):
+		elif len(os.listdir(experiment_name_new)) > 0:
+			recovery = True
+		if recovery_mode:
+			print("------------\nRECOVERY")
+			ls = os.listdir(experiment_name_new)
+			all_data = []
+			for path in ls:
+				if "all_data.json" in path:
+					continue
+				with open(experiment_name_new+path) as f:
+					all_data.append(json.load(f))
+			json_file = "all_data.json"
+			json.dump(all_data,codecs.open(experiment_name_new+json_file, "w", encoding="utf-8"), indent = 4)
+			# Recover old genotypes
+			toolbox.register("individual_guess", initIndividual, creator.Individual)
+			toolbox.register("population_guess", initPopulation, list, toolbox.individual_guess, experiment_name_new+"all_data.json")
+
+
+			population_old = toolbox.population_guess()
+			fits_old = [(float(x.replace(".json","")),) for x in ls if "all_data" not in x]	
+	
+			print("LENGTH pop old:"+str(len(population_old)))
+			if len(population_old) >= gens:
+				print("Skipping generation "+str(gen))
+				population = population_old
+				recovery_mode = False
+				continue
+			population = population[len(population_old):]
+			# Recover old fitness values
+							
 		offspring = algorithms.varAnd(population, toolbox, cxpb=cross_prob, mutpb=mutation)
 		#offspring = offspring + population
 		fits = toolbox.map(toolbox.evaluate, offspring)
+
+		if recovery_mode:
+			fits = fits + fits_old
+			population = offspring + population_old
+
 		print("Fits", fits)
 		for fit, ind in zip(fits, offspring):
 			ind.fitness.values = fit
 		if selection == "NSGA2":
-			population = toolbox.select(offspring, k=npop)
+			population = toolbox.select(offspring+population, k=npop)
 		elif selection == "Tournament":
-			population = toolbox.select(offspring, k=npop, tournsize=3)
+			population = toolbox.select(offspring+population, k=npop, tournsize=3)
 		best = tools.selBest(population, k=1)
 
 		record = stats.compile(population)
@@ -244,14 +304,14 @@ for selection in selections.keys():
 		best_fit = logbook.select("max")[0][0]
 
 		# saves results
-		file_aux = open(experiment_name_new + 'results.txt', 'a')
+		file_aux = open(experiment_name + 'results.txt', 'a')
 		print('\n GENERATION ' + str(gen) + ' ' + str(round(best_fit, 6)))
 		file_aux.write('\n' + str(gen) + ' ' + str(round(best_fit, 6)))
 		file_aux.close()
 		
-	with open(experiment_name + "logbook.pkl", "wb") as f:
-		pkl.dump(logbook, f)
-	with open(experiment_name + "best.pkl", "wb") as f:
-		pkl.dump(best, f)
-np.savetxt("best.txt", best)
+	#with open(experiment_name + "logbook.pkl", "wb") as f:
+#		pkl.dump(logbook, f)
+#	with open(experiment_name + "best.pkl", "wb") as f:
+#		pkl.dump(best, f)
+#	np.savetxt("best.txt", best)
 print("Done!")
