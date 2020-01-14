@@ -12,6 +12,7 @@ Distance to previous model tells you something about how strongly the algorithm 
 so continually evaluating bad fitnesses increases the mutation step size (exploration parameter).
 """
 
+from os import listdir
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -20,9 +21,18 @@ import matplotlib.pyplot as plt
 def create_plot(y, x):
     pass
 
-DATA_NAME = "" # copy filename here
-DATA_PATH =  "data/" + DATA_NAME
 
-data = pd.read_csv(DATA_PATH)
+def get_session_data(session, ):
+    """Takes a list of episode datasets as input and returns datasets associated with a session."""
+    pass
 
-print(data.head(10))
+
+DATA_PATH = "data/"
+
+data_files = [DATA_PATH + filename for filename in listdir(DATA_PATH)]
+
+data = get_session_data(session, )
+
+# data = pd.read_csv(DATA_PATH)
+
+# print(data.head(10))

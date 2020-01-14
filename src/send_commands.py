@@ -36,6 +36,8 @@ import numpy as np
 import sys
 import robobo
 import signal
+from os import listdir
+
 # import cv2
 # import prey
 
@@ -57,11 +59,50 @@ def terminate_program(signal_number, frame):
     sys.exit(1)
 
 
+def save_model_at(model_path, fitness, episode, sim_number):
+
+    prev_model_number = [f.split('_')[1] for f in listdir(model_path)][-1] if listdir(model_path) else -1
+
+    if episode == 0:
+        model_number = int(prev_model_number) + 1
+    else:
+        model_number = prev_model_number
+
+    model_name = "model_" + str(model_number) +  "_sim" + str(sim_number)
+
+    return model_path + model_name
+
+
+def save_data_at(data_path, data, episode):
+
+    data_columns = ['weight_1_' + str(i + 1) for i in range(8)] + \
+                   ['weight_2_' + str(i + 1) for i in range(8)] + \
+                   ['bias_' + str(i + 1) for i in range(2)] +     \
+                   ['avg_s_trans', 'avg_s_rot', 'avg_v_sens'] +   \
+                   ['episode_time_ms', 'time_of_day', 'distance_to_previous_model', 'fitness']
+
+    data = pd.DataFrame(data, columns=data_columns)
+    date = str(datetime.today().day)
+
+    sessions_today = [int(f.split("_")[1]) for f in listdir(data_path) if f.split("_")[2] == date]
+
+    if episode == 0:
+        model_index = max(sessions_today) + 1 if listdir(data_path) else 0
+    else:
+        model_index = max(sessions_today) if listdir(data_path) else 0
+
+    data.to_csv(data_path + "data_" + str(model_index) + "_" + date + "_jan.csv")
+
+
 def generateES(icls, scls, size, imin, imax, smin, smax, MODEL_PATH=False):
     """Generate neural network weights ('individuals') and evolution parameters ('strategies')"""
     if not MODEL_PATH:
-        ind = icls(random.uniform(imin, imax) for _ in range(size))
-        print('Initializing new model with parameters: \n', np.array(ind))
+
+        ind = icls([random.uniform(imin, imax) for _ in range(size - 2)] +
+                   [1. for _ in range(2)])
+
+        print(ind)
+        print("Initializing random model...")
 
     else:
         prev_model = pd.read_csv(MODEL_PATH, header=None, squeeze=True)
@@ -111,17 +152,18 @@ def main():
     hardware = False
     learning = True
     load_model = False
-    save_model = False
+    save_model = True
     save_data = True
 
-    MODEL_PATH = "src/model.csv"
+    MODEL_PATH = "src/models/"
     DATA_PATH = "src/data/"
+    SIM_NUMBER = 0  # [0,1,2] -> box, pillars, maze
     CURRENT_TIME = "".join([char if char.isalnum() else "_" for char in str(datetime.today())[5:][:-10]])
 
     if hardware:
         rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
     else:
-        rob = robobo.SimulationRobobo().connect(address='172.20.10.3', port=19997)
+        rob = robobo.SimulationRobobo(number=["","#2","#0"][SIM_NUMBER]).connect(address='172.20.10.3', port=19997)
 
 
     # DEAP initialization
@@ -144,27 +186,19 @@ def main():
     fitnesses = [-10000]
 
     data = []
-    data_columns = ['weight_1_' + str(i + 1) for i in range(len(SENS_NAMES))] + \
-                   ['weight_2_' + str(i + 1) for i in range(len(SENS_NAMES))] + \
-                   ['bias_' + str(i + 1) for i in range(2)] +                   \
-                   ['avg_s_trans', 'avg_s_rot', 'avg_v_sens'] +                 \
-                   ['episode_time_ms', 'time_of_day', 'distance_to_previous_model', 'fitness']
-
 
     ########## MAIN ALGORITHM ##########
 
-    for episode in range(EP_COUNT):
+    for ep in range(EP_COUNT):
         ep_start_time = time.time()
 
-        print('\n--- episode {} ---'.format(episode + 1))
+        print('\n--- episode {} ---'.format(ep + 1))
 
         signal.signal(signal.SIGINT, terminate_program)
         rob.play_simulation()
 
-        weights = [np.array(ind[:-2], dtype='float32').reshape(8, 2),
-                   np.array(ind[-2:], dtype='float32')]
         model = init_nn_EC(input_dims=len(SENS_NAMES), output_dims=2,
-                           weights=weights)
+                           ind=ind)
 
         print('Testing model parameters: \n', np.array(model.get_weights()))
         time.sleep(3)
@@ -173,7 +207,7 @@ def main():
 
         ep_data = []
 
-        for i in range(STEP_COUNT[episode]):
+        for i in range(STEP_COUNT[ep]):
             start_time = time.time()
 
             print('\n--- step {} ---\n'.format(i + 1))
@@ -197,7 +231,7 @@ def main():
 
             ep_data.append([s_trans, s_rot, v_sens])
 
-            # print_progress(i, STEP_COUNT[episode])
+            # print_progress(i, STEP_COUNT[ep])
             step_time = time.time() - start_time
 
         ########## EVOLUTION ##########
@@ -208,9 +242,9 @@ def main():
             ep_data = pd.DataFrame(ep_data, columns=('s_trans', 's_rot', 'v_sens'))
 
             # Calculate the fitness of the evaluated model
-            ind_fit = evaluate(ep_data, RECOVERY_TIME)
+            ind_fit = round(evaluate(ep_data, RECOVERY_TIME) / STEP_COUNT[ep],3)
             ind.fitness.values = (ind_fit,)
-            model_dist = ((np.array(pop[0]) - np.array(ind))**2).sum()
+            model_dist = round(((np.array(pop[0]) - np.array(ind))**2).sum(),3)
 
             print("this model's fitness (previous): ", ind_fit, ' (', fitnesses[0], ')')
             print("Euclidian distance to previous model: ", model_dist)
@@ -224,26 +258,25 @@ def main():
 
             if save_model:
                 best = pd.Series(list(pop[0]))
-                best.to_csv(MODEL_PATH, index=False)
+                best.to_csv(save_model_at(MODEL_PATH, fitnesses[0], ep, SIM_NUMBER), index=False)
 
             # Produce a new offspring
-            mut_rate = 0.9 * (MUT_PROB_0**episode) + 0.1
+            mut_rate = 0.9 * (MUT_PROB_0**ep) + 0.1
             offspring = toolbox.clone(pop[0])
-            ind, = toolbox.mutate(offspring, indpb=MUT_PROB_0**episode)
+            ind, = toolbox.mutate(offspring, indpb=mut_rate)
             pop.append(ind)
 
         # save the episode data
         ep_time = time.time() - ep_start_time
 
-        # print([ind, ep_time, fitnesses[0], np.array(ep_data).mean(axis=0)])
         data.append(list(ind) +
                     list(np.array(ep_data).mean(axis=0)) +
                     [datetime.today()] + [ep_time] + [model_dist] + fitnesses)
 
         # build the episode data structure for statistics and write to .csv
         if save_data:
-            data = pd.DataFrame(data, columns=data_columns)
-            data.to_csv(DATA_PATH + "model_data_" + CURRENT_TIME + ".csv")
+            save_data_at(DATA_PATH, data, ep)
+
 
 
 if __name__ == "__main__":

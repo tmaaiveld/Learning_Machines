@@ -1,6 +1,7 @@
 from keras.models import Model, Sequential
 from keras.layers import Dense, Dropout, Activation
 from keras.models import model_from_json
+import numpy as np
 
 
 def init_nn(input_dims, output_dims, hidden_layers, from_file):
@@ -31,13 +32,19 @@ def init_nn(input_dims, output_dims, hidden_layers, from_file):
     return model
 
 
-def init_nn_EC(input_dims, output_dims, weights):
+def init_nn_EC(input_dims, output_dims, ind, init_bias=False):
     """Initialize the neural network for the ES implementation."""
-    # inputLayer = Dense(input_dim=input_dims, activation='linear')
-    # outputLayer = Dense(output_dims, activation='tanh', weights=weights)(inputLayer)
+
+    if not init_bias:
+        weights = [np.array(ind[:-2], dtype='float32').reshape(8, 2),
+                   np.array(ind[-2:], dtype='float32')]
+    else:
+        weights = [np.array(ind[:-2], dtype='float32').reshape(8, 2),
+                   np.array([1., 1.], dtype='float32')]
 
     model = Sequential()
     model.add(Dense(output_dims, input_dim=input_dims, weights=weights, activation='tanh'))
+    model.add(Dropout(0.2))
     return model
 
 
