@@ -227,8 +227,8 @@ def main():
 
         'sens_names': ["IR" + str(i + 1) for i in range(8)],
         'ep_count': 1000,
-        'step_count': 50,
-        'step_size_ms': 800,
+        'step_count': 10,
+        'step_size_ms': 200,
         'C': 2.0,
         'min_value': -1.,
         'max_value':  1.,
@@ -294,6 +294,8 @@ def main():
             print_ui(step_data['IR'], step_data['position'], step_data['wheels'],
                      start_time, ep, i, params['step_count'])
 
+            time.sleep(0.5)  # if on slow computer
+
 
         ########## EVOLUTION ##########
 
@@ -310,7 +312,6 @@ def main():
         # save the episode data
         ep_time = time.time() - ep_start_time
         append_data(data, pop[0], ep_data, ep_time, model_dist, fitness_winner, fitness_loser)
-
 
         # write data to .csv
         save_data_at(DATA_PATH, data, ep) if params['save_data'] else None
