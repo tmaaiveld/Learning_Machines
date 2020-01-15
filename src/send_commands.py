@@ -125,6 +125,7 @@ def checkStrategy(minstrategy):
 
 def take_step(rob, model, params):
 
+    time.sleep(0.1)
     IR = -abs(np.log(np.array(rob.read_irs())))
     IR[np.isinf(IR)] = 0
     current_position = np.array(rob.position())
@@ -153,6 +154,9 @@ def evaluate(data, recovery_time):
 
 def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses,
           recovery_time, mut_prob_base, mut_prob_0, reeval_rate, **kwargs):
+    """Could restructure code in this function... if statements are ugly"""
+    model_dist = 0
+    fitness_winner, fitness_loser = None, None
 
     mut_rate = (1 - mut_prob_base) * (mut_prob_0 ** ep) + mut_prob_base  # could be nicer
     ep_data = pd.DataFrame(ep_data, columns=ep_data[0].keys())
@@ -179,12 +183,18 @@ def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses,
         del pop[1 - np.argmax(fitnesses)]
         del fitnesses[1 - np.argmax(fitnesses)]
 
-    # Produce a new offspring and add it to the population
-    offspring = toolbox.clone(pop[0])
-    ind, = toolbox.mutate_ES(offspring, indpb=mut_rate)
-    pop.append(ind)
+    reeval = True if random.random() < reeval_rate and not reeval else False
 
-    return ind, pop, fitnesses[0], fitness_loser
+    if not reeval:
+        # Produce a new offspring and add it to the population
+        offspring = toolbox.clone(pop[0])
+        ind, = toolbox.mutate_ES(offspring, indpb=mut_rate)
+        pop.append(ind)
+
+    else:
+        pop = [ind, ind]
+
+    return ind, pop, reeval, model_dist, fitnesses[0], fitness_loser
 
 
 def save_model(MODEL_PATH, model_ind, ep, SIM_NUMBER):
@@ -195,7 +205,7 @@ def save_model(MODEL_PATH, model_ind, ep, SIM_NUMBER):
 def append_data(data, ind, ep_data, ep_time, model_dist, fitness_winner=None, fitness_loser=None):
     row = list(ind) + \
           list(pd.DataFrame(ep_data).mean(axis=0)) + \
-          [datetime.today()] + [ep_time] + [model_dist] + \
+          [ep_time] + [datetime.today()] + [model_dist] + \
           [fitness_winner, fitness_loser]
 
     data.append(row)
@@ -217,8 +227,8 @@ def main():
 
         'sens_names': ["IR" + str(i + 1) for i in range(8)],
         'ep_count': 1000,
-        'step_count': 250,
-        'step_size_ms': 100,
+        'step_count': 50,
+        'step_size_ms': 800,
         'C': 2.0,
         'min_value': -1.,
         'max_value':  1.,
@@ -236,7 +246,7 @@ def main():
     if params['hardware']:
         rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
     else:
-        rob = robobo.SimulationRobobo(number=["","#2","#0"][SIM_NUMBER]).connect(address='172.20.10.3', port=19997)
+        rob = robobo.SimulationRobobo(number=["","#2","#0"][SIM_NUMBER]).connect(address='172.20.10.2', port=19997)
         # rob2 = robobo.SimulationRobobo(number=["","#2","#0"][1]).connect(address='172.20.10.3', port=19998)
 
     print_welcome()
@@ -262,7 +272,9 @@ def main():
         print_cycle(ep)
         ep_start_time = time.time()
 
-        start_sim(rob)
+        # start_sim(rob)
+        signal.signal(signal.SIGINT, terminate_program)
+        rob.play_simulation()
 
         if not reeval:
             model = init_nn_EC(input_dims=len(params['sens_names']), output_dims=2, ind=ind, dropout=LEARNING)
@@ -285,12 +297,9 @@ def main():
 
         ########## EVOLUTION ##########
 
-        model_dist = 0
-        fitness_winner, fitness_loser = None, None
-
         if LEARNING:
             rob.move(0, 0, 1)
-            ind, pop, fitness_winner, fitness_loser = learn(toolbox, ep_data, ep, reeval,
+            ind, pop, reeval, model_dist, fitness_winner, fitness_loser = learn(toolbox, ep_data, ep, reeval,
                                                                ind, pop, fitnesses, **params)
 
             if params['save_model']:
@@ -300,13 +309,11 @@ def main():
 
         # save the episode data
         ep_time = time.time() - ep_start_time
-        append_data(data, ind, ep_data, ep_time, model_dist, fitness_winner, fitness_loser)
+        append_data(data, pop[0], ep_data, ep_time, model_dist, fitness_winner, fitness_loser)
 
 
         # write data to .csv
         save_data_at(DATA_PATH, data, ep) if params['save_data'] else None
-
-        reeval = True if random.random() < params['reeval_rate'] and not reeval else False
 
 
 if __name__ == "__main__":
