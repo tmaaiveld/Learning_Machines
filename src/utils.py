@@ -60,8 +60,11 @@ def print_time(td):
     print("Elapsed time: {:02d}:{:02d}:{:02d}".format(hours, minutes, seconds))
 
 
-def print_ui(IR, current_position, wheels, start_time, ep, i, max_step):
+def print_ui(IR, current_position, wheels, model, start_time, ep, i, max_step):
     print_cycle(ep, i)
+    print('currently testing: \n')
+    print(np.array(model.get_weights()).T)
+    print('\n')
     current_time = datetime.now() - start_time
     print_time(current_time)
     print_rob(IR, current_position, wheels)

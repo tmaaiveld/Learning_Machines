@@ -154,9 +154,12 @@ def evaluate(data, recovery_time):
 
 def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses,
           recovery_time, mut_prob_base, mut_prob_0, reeval_rate, **kwargs):
-    """Could restructure code in this function... if statements are ugly"""
-    model_dist = 0
-    fitness_winner, fitness_loser = None, None
+    """Could restructure code in this function... The if statements below are pure horror logic, but I will fix
+    them at a later date. `reeval` might also be a nice global, that way it might not need to be called outside
+    learn()."""
+
+    # model_dist = 0
+    # fitness_winner, fitness_loser = None, None
 
     mut_rate = (1 - mut_prob_base) * (mut_prob_0 ** ep) + mut_prob_base  # could be nicer
     ep_data = pd.DataFrame(ep_data, columns=ep_data[0].keys())
@@ -164,37 +167,68 @@ def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses,
     # Calculate the fitness and print some stats
     ind_fit = round(evaluate(ep_data, recovery_time), 3)
     ind.fitness.values = (ind_fit,)
+    fitnesses.append(ind_fit)
 
     model_dist = round(((np.array(pop[0]) - np.array(ind)) ** 2).sum(), 3)
 
-    print_ep_ui(ind_fit, fitnesses[0], model_dist, mut_rate, reeval)  # could move this
+    print_ep_ui(ind_fit, fitnesses[0], model_dist, mut_rate, reeval)
 
-    if reeval:
-        ind_fit = reeval_rate * ind_fit + (1 - reeval_rate) * fitnesses[0]
+    set_reeval = random.random() < reeval_rate
+
+    print('\n\ndebug information:\n')
+    print('reeval: ', reeval)
+    print('prev_ind: ', pop[0])
+    print('ind: ', pop[1])
+    print('#pop: ', len(pop))
+    print('fit: ', fitnesses)
+    time.sleep(10)
+    print('setting reeval to True...') if set_reeval else print('Performing selection/recalculation and mutation...')
+
+    if reeval:  # A
+
+        ind_fit = reeval_rate * fitnesses[1] + (1 - reeval_rate) * fitnesses[0]
         ind.fitness.values = (ind_fit,)
-        fitnesses = [ind_fit]
-        fitness_loser = fitnesses[0]
 
-    else:
-        # Perform selection and delete the inferior model
-        fitnesses.append(ind_fit)
+        del pop[0]
+        fitnesses = [ind_fit]
+        fitness_loser = np.nan
+
+        reeval = False
+
+        ind = mutate(toolbox, pop[0], mut_rate)  # C
+        pop.append(ind)
+
+        print('\nrecalculated fitness, testing mutant: \n')
+        print(ind)
+
+    else:  # B
+
         fitness_loser = fitnesses[1 - np.argmax(fitnesses)]
 
         del pop[1 - np.argmax(fitnesses)]
         del fitnesses[1 - np.argmax(fitnesses)]
 
-    reeval = True if random.random() < reeval_rate and not reeval else False
+        reeval = True if set_reeval else False
 
-    if not reeval:
-        # Produce a new offspring and add it to the population
-        offspring = toolbox.clone(pop[0])
-        ind, = toolbox.mutate_ES(offspring, indpb=mut_rate)
-        pop.append(ind)
+        if reeval:  # D
+            ind = toolbox.clone(ind)
+            pop.append(ind)
+            print('\nPerforming re-evaluation of : \n')
+            print(ind)
 
-    else:
-        pop = [ind, ind]
+        else:  # C
+            ind = mutate(toolbox, pop[0], mut_rate)
+            pop.append(ind)
+            print('\neliminated current best, testing mutant: \n')
+            print(ind)
 
-    return ind, pop, reeval, model_dist, fitnesses[0], fitness_loser
+    return ind, pop, reeval, model_dist, fitnesses, fitness_loser
+
+
+def mutate(toolbox, ind, mut_rate):
+    offspring = toolbox.clone(ind)
+    ind, = toolbox.mutate_ES(offspring, indpb=mut_rate)
+    return ind
 
 
 def save_model(MODEL_PATH, model_ind, ep, SIM_NUMBER):
@@ -276,13 +310,12 @@ def main():
         signal.signal(signal.SIGINT, terminate_program)
         rob.play_simulation()
 
-        if not reeval:
-            model = init_nn_EC(input_dims=len(params['sens_names']), output_dims=2, ind=ind, dropout=LEARNING)
-
-        print('Testing these model parameters: \n', np.array(model.get_weights()).T)
+        model = init_nn_EC(input_dims=len(params['sens_names']), output_dims=2, ind=ind, dropout=LEARNING)
 
 
         ########## EVALUATION ##########
+
+        print('Testing these model parameters: \n', np.array(model.get_weights()).T)
 
         ep_data = []
 
@@ -292,26 +325,31 @@ def main():
             ep_data.append(step_data)
 
             print_ui(step_data['IR'], step_data['position'], step_data['wheels'],
-                     start_time, ep, i, params['step_count'])
+                     model, start_time, ep, i, params['step_count'])
 
-            time.sleep(0.5)  # if on slow computer
+            time.sleep(1)  # if on slow computer
 
 
         ########## EVOLUTION ##########
 
+        model_dist = 0  # if not learning
+        fitness_loser = 0
+
         if LEARNING:
             rob.move(0, 0, 1)
-            ind, pop, reeval, model_dist, fitness_winner, fitness_loser = learn(toolbox, ep_data, ep, reeval,
-                                                               ind, pop, fitnesses, **params)
-
+            print('fitnesses in: ', fitnesses)
+            ind, pop, reeval, model_dist, fitnesses, fitness_loser = learn(toolbox, ep_data, ep, reeval,
+                                                                           ind, pop, fitnesses, **params)
+            print('fitnesses out: ', fitnesses)
+            
             if params['save_model']:
                 save_model(MODEL_PATH, pop[0], ep, SIM_NUMBER)
 
-            fitnesses = [fitness_winner]
+            # fitnesses = [fitness_winner]
 
         # save the episode data
         ep_time = time.time() - ep_start_time
-        append_data(data, pop[0], ep_data, ep_time, model_dist, fitness_winner, fitness_loser)
+        append_data(data, pop[0], ep_data, ep_time, model_dist, fitnesses[0], fitness_loser)
 
         # write data to .csv
         save_data_at(DATA_PATH, data, ep) if params['save_data'] else None
