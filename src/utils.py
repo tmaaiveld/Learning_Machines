@@ -49,7 +49,7 @@ def print_cycle(ep, i=False):
 
 
 def print_rob(IR, current_position, wheels):
-    print("ROB IRs: {}".format(IR / 10))
+    print("ROB IRs: {}".format(abs(IR)))
     print("robobo is at {}".format(current_position))
     print("Wheel speeds: [{:.2f} {:.2f}]".format(wheels[0], wheels[1]))
 
@@ -60,9 +60,16 @@ def print_time(td):
     print("Elapsed time: {:02d}:{:02d}:{:02d}".format(hours, minutes, seconds))
 
 
-def print_ui(IR, current_position, wheels, model, start_time, ep, i, max_step):
+def print_ui(IR, current_position, wheels, model, fitnesses,
+             start_time, ep, i, max_step, hardware=False):
+
     print_cycle(ep, i)
-    print('currently testing: \n')
+    if hardware:
+        print('Hardware mode is ON')
+    else:
+        print('Hardware mode is OFF\n')
+
+    print('Currently testing (mutant of) model with fitness {}: \n'.format(fitnesses[0]))
     print(np.array(model.get_weights()).T)
     print('\n')
     current_time = datetime.now() - start_time
@@ -91,14 +98,14 @@ def save_data_at(data_path, data, episode):
     data = pd.DataFrame(data, columns=data_columns)
     today = str(datetime.today().day)
 
-    sessions_today = [int(f.split("_")[1]) for f in listdir(data_path) if f.split("_")[2] == today]
+    sessions_today = [int(f.split("_")[2]) for f in listdir(data_path) if f.split("_")[1] == today]
 
     if episode == 0:
         model_index = max(sessions_today) + 1 if sessions_today else 0
     else:
         model_index = max(sessions_today) if sessions_today else 0
 
-    data.to_csv(data_path + "data_" + str(model_index) + "_" + today + "_jan.csv")
+    data.to_csv(data_path + "data_" +  today + "_" + str(model_index) + "_jan.csv")
 
 
 def generate_name(model, model_path, episode, sim_number):
@@ -113,3 +120,16 @@ def generate_name(model, model_path, episode, sim_number):
     model_name = "model_" + str(model_number) +  "_sim" + str(sim_number)
 
     model.to_csv(model_path + model_name, index=False)
+
+
+def print_debug_ui(pop, fitnesses, reeval, set_reeval):
+    print('\n\ndebug information:\n')
+    print('reeval: ', reeval)
+    print('prev_ind: ', pop[0])
+    print('ind: ', pop[1])
+    print('#pop: ', len(pop))
+    print('fit: ', fitnesses)
+    if set_reeval:
+        print('\nSetting reeval to True on next episode...')
+    else:
+        print('\nPerforming selection/recalculation and mutation...')

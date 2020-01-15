@@ -21,6 +21,7 @@ todo's
 - Streamlining driving (smoother drive)
 - Implement crossover to escape getting stuck? (might shake things up a bit)
     > perhaps a structure where X-over happens when fitnesses are very close.
+    > perform X-over with previous HoF?
 - performing evolutionary computing on what sensors are active? See Eiben 2015. Might help solve maze problem, as the
   sensor arrangement is pretty crucial
 
@@ -45,7 +46,8 @@ from deap import creator
 from deap import tools
 
 from neural_network import init_nn_EC
-from utils import print_welcome, print_cycle, print_ui, print_ep_ui, save_data_at, generate_name
+from utils import print_welcome, print_cycle, print_ui, print_ep_ui, print_debug_ui, save_data_at, generate_name
+from params import params
 np.set_printoptions(suppress=True, formatter={'float_kind': '{:0.2f}'.format})
 
 
@@ -125,7 +127,7 @@ def checkStrategy(minstrategy):
 
 def take_step(rob, model, params):
 
-    time.sleep(0.1)
+    # time.sleep(0.1)
     IR = -abs(np.log(np.array(rob.read_irs())))
     IR[np.isinf(IR)] = 0
     current_position = np.array(rob.position())
@@ -144,28 +146,20 @@ def take_step(rob, model, params):
         "position": current_position
     }
 
+    print(step_data['v_sens'])
+
     return step_data
 
 
-def evaluate(data, recovery_time):
-    """Fitness as defined in Eiben et al. 2015"""
-    return (data['s_trans'] * (1 - data['s_rot']) * (1 - data['v_sens']))[recovery_time:].sum()
-
-
-def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses,
+def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses, step_count,
           recovery_time, mut_prob_base, mut_prob_0, reeval_rate, **kwargs):
-    """Could restructure code in this function... The if statements below are pure horror logic, but I will fix
-    them at a later date. `reeval` might also be a nice global, that way it might not need to be called outside
-    learn()."""
-
-    # model_dist = 0
-    # fitness_winner, fitness_loser = None, None
 
     mut_rate = (1 - mut_prob_base) * (mut_prob_0 ** ep) + mut_prob_base  # could be nicer
     ep_data = pd.DataFrame(ep_data, columns=ep_data[0].keys())
 
     # Calculate the fitness and print some stats
-    ind_fit = round(evaluate(ep_data, recovery_time), 3)
+    ind_fit = evaluate(ep_data, recovery_time) / step_count
+    # print('rec_time: ', recovery_time)
     ind.fitness.values = (ind_fit,)
     fitnesses.append(ind_fit)
 
@@ -175,14 +169,7 @@ def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses,
 
     set_reeval = random.random() < reeval_rate
 
-    print('\n\ndebug information:\n')
-    print('reeval: ', reeval)
-    print('prev_ind: ', pop[0])
-    print('ind: ', pop[1])
-    print('#pop: ', len(pop))
-    print('fit: ', fitnesses)
-    time.sleep(10)
-    print('setting reeval to True...') if set_reeval else print('Performing selection/recalculation and mutation...')
+    print_debug_ui(pop, fitnesses, reeval, set_reeval)
 
     if reeval:  # A
 
@@ -203,15 +190,12 @@ def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses,
 
     else:  # B
 
-        fitness_loser = fitnesses[1 - np.argmax(fitnesses)]
-
-        del pop[1 - np.argmax(fitnesses)]
-        del fitnesses[1 - np.argmax(fitnesses)]
+        pop, fitnesses, fitness_loser = surv_select(pop, fitnesses)
 
         reeval = True if set_reeval else False
 
         if reeval:  # D
-            ind = toolbox.clone(ind)
+            ind = toolbox.clone(pop[0])
             pop.append(ind)
             print('\nPerforming re-evaluation of : \n')
             print(ind)
@@ -219,16 +203,35 @@ def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses,
         else:  # C
             ind = mutate(toolbox, pop[0], mut_rate)
             pop.append(ind)
-            print('\neliminated current best, testing mutant: \n')
+            print('\nTesting mutant: \n')
             print(ind)
 
+    # time.sleep(20)
+
     return ind, pop, reeval, model_dist, fitnesses, fitness_loser
+
+
+def evaluate(data, recovery_time):
+    """Fitness as defined in Eiben et al. 2015"""
+
+    return (data['s_trans'] * (1 - data['s_rot']) * (1 - data['v_sens']))[recovery_time:].sum()
 
 
 def mutate(toolbox, ind, mut_rate):
     offspring = toolbox.clone(ind)
     ind, = toolbox.mutate_ES(offspring, indpb=mut_rate)
     return ind
+
+
+def surv_select(pop, fitnesses):
+    fitness_loser = fitnesses[1 - np.argmax(fitnesses)]
+
+    del pop[1 - np.argmax(fitnesses)]
+    del fitnesses[1 - np.argmax(fitnesses)]
+
+    print('Survivor: \n')
+    print(pop[0])
+    return pop, fitnesses, fitness_loser
 
 
 def save_model(MODEL_PATH, model_ind, ep, SIM_NUMBER):
@@ -253,35 +256,39 @@ def main():
     SIM_NUMBER = 0  # [0,1,2] -> box, pillars, maze
     LEARNING = True
 
-    params = {
-        'hardware': False,
-        'load_model': False,
-        'save_model': True if LEARNING else False,
-        'save_data': True,
+    # params = {
+    #     'hardware': False,
+    #     'load_model': False,
+    #     'save_model': True,
+    #     'save_data': True,
+    #
+    #     'sens_names': ["IR" + str(i + 1) for i in range(8)],
+    #     'ep_count': 1000,
+    #     'step_count': 10,
+    #     'step_size_ms': 100,
+    #     'C': 2.0,
+    #     'min_value': -1.,
+    #     'max_value': 1.,
+    #     'min_strategy': -1.,
+    #     'max_strategy': 1.,
+    #     'mut_prob_0': 0.92,
+    #     'mut_prob_base': 0.3,
+    #     'm_max': 20,
+    #     'recovery_time': 5,
+    #     'init_bias': True,
+    #     'reeval_rate': 0.5,
+    #     'max_sens': 6.1
+    # }
 
-        'sens_names': ["IR" + str(i + 1) for i in range(8)],
-        'ep_count': 1000,
-        'step_count': 10,
-        'step_size_ms': 200,
-        'C': 2.0,
-        'min_value': -1.,
-        'max_value':  1.,
-        'min_strategy': -1.,
-        'max_strategy': 1.,
-        'mut_prob_0': 0.92,
-        'mut_prob_base': 0.3,
-        'm_max': 20,
-        'recovery_time': 5,
-        'init_bias': True,
-        'reeval_rate': 0.2 if LEARNING else 0,
-        'max_sens': 0.65
-    }
+    if not LEARNING:
+        params['reeval_rate'] = 0
+        params['save_model'] = False
 
     if params['hardware']:
         rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
     else:
-        rob = robobo.SimulationRobobo(number=["","#2","#0"][SIM_NUMBER]).connect(address='172.20.10.2', port=19997)
-        # rob2 = robobo.SimulationRobobo(number=["","#2","#0"][1]).connect(address='172.20.10.3', port=19998)
+        rob = robobo.SimulationRobobo(number=["","#2","#0"][SIM_NUMBER]).connect(address='172.20.10.3', port=19997)
+        # rob2 = robobo.SimulationRobobo(number=["","#2","#0"][1]).connect(address='172.20.10.2', port=19998)
 
     print_welcome()
     toolbox = init_deap(**params)
@@ -325,9 +332,9 @@ def main():
             ep_data.append(step_data)
 
             print_ui(step_data['IR'], step_data['position'], step_data['wheels'],
-                     model, start_time, ep, i, params['step_count'])
+                     model, fitnesses, start_time, ep, i, params['step_count'])
 
-            time.sleep(1)  # if on slow computer
+            # time.sleep(1)  # if on slow computer
 
 
         ########## EVOLUTION ##########
@@ -337,15 +344,13 @@ def main():
 
         if LEARNING:
             rob.move(0, 0, 1)
-            print('fitnesses in: ', fitnesses)
+            # print('fitnesses in: ', fitnesses)
             ind, pop, reeval, model_dist, fitnesses, fitness_loser = learn(toolbox, ep_data, ep, reeval,
                                                                            ind, pop, fitnesses, **params)
-            print('fitnesses out: ', fitnesses)
+            # print('fitnesses out: ', fitnesses)
             
             if params['save_model']:
                 save_model(MODEL_PATH, pop[0], ep, SIM_NUMBER)
-
-            # fitnesses = [fitness_winner]
 
         # save the episode data
         ep_time = time.time() - ep_start_time

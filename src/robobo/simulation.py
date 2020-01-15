@@ -161,12 +161,12 @@ class SimulationRobobo(Robobo):
         time.sleep(duration)
         
         # Stop to move the wheels motor. Angular velocity.
-        stopRightVelocity = stopLeftVelocity = 0
-        self._vrep_set_joint_target_velocity(self._LeftMotor, stopLeftVelocity,
-                                                  vrep.simx_opmode_oneshot)
-        self._vrep_set_joint_target_velocity(self._RightMotor, stopRightVelocity,
-                                                  vrep.simx_opmode_oneshot)
-        self.wait_for_ping()
+        # stopRightVelocity = stopLeftVelocity = 0
+        # self._vrep_set_joint_target_velocity(self._LeftMotor, stopLeftVelocity,
+        #                                           vrep.simx_opmode_oneshot)
+        # self._vrep_set_joint_target_velocity(self._RightMotor, stopRightVelocity,
+        #                                           vrep.simx_opmode_oneshot)
+        # self.wait_for_ping()
 
     def talk(self, message):
         print("ROBOT SAYS: {}".format(message))
