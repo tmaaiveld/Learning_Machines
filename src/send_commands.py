@@ -23,7 +23,10 @@ todo's
     > perhaps a structure where X-over happens when fitnesses are very close.
 - performing evolutionary computing on what sensors are active? See Eiben 2015. Might help solve maze problem, as the
   sensor arrangement is pretty crucial
-- could gather all params in a dict to prettify code
+
+code cleanup:
+- check more func arg passes
+- could make individual type a dict
 """
 
 from __future__ import print_function
@@ -32,26 +35,23 @@ import time
 from datetime import datetime
 import random
 import array
-import numpy as np
 import sys
 import robobo
 import signal
-from os import listdir
-
-# import cv2
-# import prey
+import numpy as np
+import pandas as pd
+from deap import base
+from deap import creator
+from deap import tools
 
 from neural_network import init_nn_EC
-
-try:
-    from deap import base
-    from deap import creator
-    from deap import tools
-    import pandas as pd
-except ModuleNotFoundError:
-    raise ModuleNotFoundError('Run `pip install deap` and `pip install pandas` first.')
-
+from utils import print_welcome, print_cycle, print_ui, print_ep_ui, save_data_at, generate_name
 np.set_printoptions(suppress=True, formatter={'float_kind': '{:0.2f}'.format})
+
+
+def start_sim(rob):
+    signal.signal(signal.SIGINT, terminate_program)
+    rob.play_simulation()
 
 
 def terminate_program(signal_number, frame):
@@ -59,50 +59,45 @@ def terminate_program(signal_number, frame):
     sys.exit(1)
 
 
-def save_model_at(model_path, fitness, episode, sim_number):
+def init_deap(sens_names, C, min_value, max_value, min_strategy, max_strategy, **kwargs):
+    """
+    Function for initializing DEAP. Read the docs before fiddling (google 'DEAP')
+    """
 
-    prev_model_number = [f.split('_')[1] for f in listdir(model_path)][-1] if listdir(model_path) else -1
+    # Register the fitness function and individual types
+    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+    creator.create("Individual", array.array, typecode="d",
+                   fitness=creator.FitnessMax, strategy=None)
+    creator.create("Strategy", array.array, typecode="d")
 
-    if episode == 0:
-        model_number = int(prev_model_number) + 1
-    else:
-        model_number = prev_model_number
+    # Register two variations of an individual, ES vector and sensor bitstring
+    toolbox = base.Toolbox()
+    toolbox.register("individual", generateES, creator.Individual, creator.Strategy,
+                     (2 * len(sens_names) + 2), min_value, max_value, min_strategy, max_strategy)
 
-    model_name = "model_" + str(model_number) +  "_sim" + str(sim_number)
+    toolbox.register("attr_int", random.randint, 0, 1)
+    toolbox.register("bitstring", tools.initRepeat, creator.Individual,
+                     toolbox.attr_int, len(sens_names))
 
-    return model_path + model_name
+    # Register mutation procedures
+    # toolbox.register("mutate_bitstring", tools.)
+    toolbox.register("mutate_ES", tools.mutESLogNormal, c=C)
+    toolbox.decorate("mutate_ES", checkStrategy(min_strategy))
 
-
-def save_data_at(data_path, data, episode):
-
-    data_columns = ['weight_1_' + str(i + 1) for i in range(8)] + \
-                   ['weight_2_' + str(i + 1) for i in range(8)] + \
-                   ['bias_' + str(i + 1) for i in range(2)] +     \
-                   ['avg_s_trans', 'avg_s_rot', 'avg_v_sens'] +   \
-                   ['episode_time_ms', 'time_of_day', 'distance_to_previous_model', 'fitness']
-
-    data = pd.DataFrame(data, columns=data_columns)
-    date = str(datetime.today().day)
-
-    sessions_today = [int(f.split("_")[1]) for f in listdir(data_path) if f.split("_")[2] == date]
-
-    if episode == 0:
-        model_index = max(sessions_today) + 1 if listdir(data_path) else 0
-    else:
-        model_index = max(sessions_today) if listdir(data_path) else 0
-
-    data.to_csv(data_path + "data_" + str(model_index) + "_" + date + "_jan.csv")
+    return toolbox
 
 
-def generateES(icls, scls, size, imin, imax, smin, smax, MODEL_PATH=False):
+def generateES(icls, scls, size, imin, imax, smin, smax, MODEL_PATH=False, init_bias=False):
     """Generate neural network weights ('individuals') and evolution parameters ('strategies')"""
     if not MODEL_PATH:
 
-        ind = icls([random.uniform(imin, imax) for _ in range(size - 2)] +
-                   [1. for _ in range(2)])
-
-        print(ind)
-        print("Initializing random model...")
+        if not init_bias:
+            print("Initializing random model with random biases.")
+            ind = icls(random.uniform(imin, imax) for _ in range(size))
+        else:
+            print("Initializing random model with bias weights [1. 1.].")
+            ind = icls([random.uniform(imin, imax) for _ in range(size - 2)] +
+                       [1. for _ in range(2)])
 
     else:
         prev_model = pd.read_csv(MODEL_PATH, header=None, squeeze=True)
@@ -128,155 +123,190 @@ def checkStrategy(minstrategy):
     return decorator
 
 
+def take_step(rob, model, params):
+
+    IR = -abs(np.log(np.array(rob.read_irs())))
+    IR[np.isinf(IR)] = 0
+    current_position = np.array(rob.position())
+
+    wheels = model.predict(np.expand_dims(IR, axis=0))[0] * params['m_max']
+
+    rob.move(wheels[0], wheels[1], params['step_size_ms'])
+
+    step_data = {
+        "s_trans": wheels[0] + wheels[1],
+        "s_rot": abs(wheels[0] - wheels[1]) / (2 * params['m_max']),
+        "v_sens": min(max(-IR) / params['max_sens'], 1),
+        "v_total": abs(sum(IR)),
+        "IR": IR,
+        "wheels": wheels,
+        "position": current_position
+    }
+
+    return step_data
+
+
 def evaluate(data, recovery_time):
-    """Fitness as implemented by Eiben et al. 2015"""
+    """Fitness as defined in Eiben et al. 2015"""
     return (data['s_trans'] * (1 - data['s_rot']) * (1 - data['v_sens']))[recovery_time:].sum()
 
 
+def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses,
+          recovery_time, mut_prob_base, mut_prob_0, reeval_rate, **kwargs):
+
+    mut_rate = (1 - mut_prob_base) * (mut_prob_0 ** ep) + mut_prob_base  # could be nicer
+    ep_data = pd.DataFrame(ep_data, columns=ep_data[0].keys())
+
+    # Calculate the fitness and print some stats
+    ind_fit = round(evaluate(ep_data, recovery_time), 3)
+    ind.fitness.values = (ind_fit,)
+
+    model_dist = round(((np.array(pop[0]) - np.array(ind)) ** 2).sum(), 3)
+
+    print_ep_ui(ind_fit, fitnesses[0], model_dist, mut_rate, reeval)  # could move this
+
+    if reeval:
+        ind_fit = reeval_rate * ind_fit + (1 - reeval_rate) * fitnesses[0]
+        ind.fitness.values = (ind_fit,)
+        fitnesses = [ind_fit]
+        fitness_loser = fitnesses[0]
+
+    else:
+        # Perform selection and delete the inferior model
+        fitnesses.append(ind_fit)
+        fitness_loser = fitnesses[1 - np.argmax(fitnesses)]
+
+        del pop[1 - np.argmax(fitnesses)]
+        del fitnesses[1 - np.argmax(fitnesses)]
+
+    # Produce a new offspring and add it to the population
+    offspring = toolbox.clone(pop[0])
+    ind, = toolbox.mutate_ES(offspring, indpb=mut_rate)
+    pop.append(ind)
+
+    return ind, pop, fitnesses[0], fitness_loser
+
+
+def save_model(MODEL_PATH, model_ind, ep, SIM_NUMBER):
+    model = pd.Series(list(model_ind))
+    model.to_csv(generate_name(model, MODEL_PATH, ep, SIM_NUMBER), index=False)
+
+
+def append_data(data, ind, ep_data, ep_time, model_dist, fitness_winner=None, fitness_loser=None):
+    row = list(ind) + \
+          list(pd.DataFrame(ep_data).mean(axis=0)) + \
+          [datetime.today()] + [ep_time] + [model_dist] + \
+          [fitness_winner, fitness_loser]
+
+    data.append(row)
+
+
 def main():
-    SENS_NAMES = ["IR" + str(i + 1) for i in range(8)]
 
-    EP_COUNT = 500
-    STEP_COUNT = list(range(10,100,2)) + [100] * EP_COUNT
-    STEP_SIZE_MS = 500
-
-    # ES parameters
-    M_MAX = 20  # sets the maximum speed of the robot
-    MUT_PROB_0 = 0.95  # sets the probability of mutating an allele (p_m) at t=0, which decreases exponentially
-    C = 2.0  # sets the rate at which mutation step size cools down... I think? See Schwefer 2002.
-    MIN_VALUE, MAX_VALUE = -1., 1.  # random init range for NN weights (positive to ensure driving forward)
-    MIN_STRATEGY, MAX_STRATEGY = -1., 1.
-    RECOVERY_TIME = 5  # sets the number of initial steps not evaluated
-
-    # Initialization -> SET THESE PARAMETERS CAREFULLY SO YOU DON'T OVERWRITE YOUR WORK.
-    hardware = False
-    learning = True
-    load_model = False
-    save_model = True
-    save_data = True
-
+    # Initialization
     MODEL_PATH = "src/models/"
     DATA_PATH = "src/data/"
     SIM_NUMBER = 0  # [0,1,2] -> box, pillars, maze
-    CURRENT_TIME = "".join([char if char.isalnum() else "_" for char in str(datetime.today())[5:][:-10]])
+    LEARNING = True
 
-    if hardware:
+    params = {
+        'hardware': False,
+        'load_model': False,
+        'save_model': True if LEARNING else False,
+        'save_data': True,
+
+        'sens_names': ["IR" + str(i + 1) for i in range(8)],
+        'ep_count': 1000,
+        'step_count': 250,
+        'step_size_ms': 100,
+        'C': 2.0,
+        'min_value': -1.,
+        'max_value':  1.,
+        'min_strategy': -1.,
+        'max_strategy': 1.,
+        'mut_prob_0': 0.92,
+        'mut_prob_base': 0.3,
+        'm_max': 20,
+        'recovery_time': 5,
+        'init_bias': True,
+        'reeval_rate': 0.2 if LEARNING else 0,
+        'max_sens': 0.65
+    }
+
+    if params['hardware']:
         rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
     else:
         rob = robobo.SimulationRobobo(number=["","#2","#0"][SIM_NUMBER]).connect(address='172.20.10.3', port=19997)
+        # rob2 = robobo.SimulationRobobo(number=["","#2","#0"][1]).connect(address='172.20.10.3', port=19998)
 
+    print_welcome()
+    toolbox = init_deap(**params)
 
-    # DEAP initialization
-        # genotype structure: first 16 are weights (2 for each input, last allele is bias node gene)
+    if params['load_model']:
+        ind = toolbox.individual(MODEL_PATH=MODEL_PATH)
+    else:
+        ind = toolbox.individual(init_bias=params['init_bias'])
 
-    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-    creator.create("Individual", array.array, typecode="d",
-                   fitness=creator.FitnessMax, strategy=None)
-    creator.create("Strategy", array.array, typecode="d")
-
-    toolbox = base.Toolbox()
-    toolbox.register("individual", generateES, creator.Individual, creator.Strategy,
-                     (2 * len(SENS_NAMES) + 2), MIN_VALUE, MAX_VALUE, MIN_STRATEGY, MAX_STRATEGY)
-
-    toolbox.register("mutate", tools.mutESLogNormal, c=C)
-    toolbox.decorate("mutate", checkStrategy(MIN_STRATEGY))
-
-    ind = toolbox.individual(MODEL_PATH=MODEL_PATH) if load_model else toolbox.individual()
     pop = [ind, ind]
     fitnesses = [-10000]
 
     data = []
+    reeval = False
+
 
     ########## MAIN ALGORITHM ##########
 
-    for ep in range(EP_COUNT):
+    start_time = datetime.now()
+    for ep in range(params['ep_count']):
+
+        print_cycle(ep)
         ep_start_time = time.time()
 
-        print('\n--- episode {} ---'.format(ep + 1))
+        start_sim(rob)
 
-        signal.signal(signal.SIGINT, terminate_program)
-        rob.play_simulation()
+        if not reeval:
+            model = init_nn_EC(input_dims=len(params['sens_names']), output_dims=2, ind=ind, dropout=LEARNING)
 
-        model = init_nn_EC(input_dims=len(SENS_NAMES), output_dims=2,
-                           ind=ind)
+        print('Testing these model parameters: \n', np.array(model.get_weights()).T)
 
-        print('Testing model parameters: \n', np.array(model.get_weights()))
-        time.sleep(3)
 
         ########## EVALUATION ##########
 
         ep_data = []
 
-        for i in range(STEP_COUNT[ep]):
-            start_time = time.time()
+        for i in range(params['step_count']):
 
-            print('\n--- step {} ---\n'.format(i + 1))
+            step_data = take_step(rob, model, params)
+            ep_data.append(step_data)
 
-            IR = -abs(np.log(np.array(rob.read_irs())))
-            IR[np.isinf(IR)] = 0
-            current_position = np.array(rob.position())
-            wheels = model.predict(np.expand_dims(IR, axis=0))[0] * M_MAX
+            print_ui(step_data['IR'], step_data['position'], step_data['wheels'],
+                     start_time, ep, i, params['step_count'])
 
-            print("ROB IRs: {}".format(IR / 10))
-            print("robobo is at {}".format(current_position))
-            print("Wheel speeds: ", wheels)
-
-            # move the robot
-            rob.move(wheels[0], wheels[1], STEP_SIZE_MS)
-
-            # collect data
-            s_trans = wheels[0] + wheels[1]
-            s_rot = abs(wheels[0] - wheels[1]) / (2 * M_MAX)  # make readings negative for correct initialization
-            v_sens = min(max(-IR) / 6.3, 1)  # ugly normalization
-
-            ep_data.append([s_trans, s_rot, v_sens])
-
-            # print_progress(i, STEP_COUNT[ep])
-            step_time = time.time() - start_time
 
         ########## EVOLUTION ##########
 
-        model_dist = 0  # set model distance to 0 if not learning
-        if learning:
+        model_dist = 0
+        fitness_winner, fitness_loser = None, None
 
-            ep_data = pd.DataFrame(ep_data, columns=('s_trans', 's_rot', 'v_sens'))
+        if LEARNING:
+            rob.move(0, 0, 1)
+            ind, pop, fitness_winner, fitness_loser = learn(toolbox, ep_data, ep, reeval,
+                                                               ind, pop, fitnesses, **params)
 
-            # Calculate the fitness of the evaluated model
-            ind_fit = round(evaluate(ep_data, RECOVERY_TIME) / STEP_COUNT[ep],3)
-            ind.fitness.values = (ind_fit,)
-            model_dist = round(((np.array(pop[0]) - np.array(ind))**2).sum(),3)
+            if params['save_model']:
+                save_model(MODEL_PATH, pop[0], ep, SIM_NUMBER)
 
-            print("this model's fitness (previous): ", ind_fit, ' (', fitnesses[0], ')')
-            print("Euclidian distance to previous model: ", model_dist)
-
-            # delete the inferior model
-            fitnesses.append(ind_fit)
-            print(fitnesses)
-
-            del pop[1 - np.argmax(fitnesses)]
-            del fitnesses[1 - np.argmax(fitnesses)]
-
-            if save_model:
-                best = pd.Series(list(pop[0]))
-                best.to_csv(save_model_at(MODEL_PATH, fitnesses[0], ep, SIM_NUMBER), index=False)
-
-            # Produce a new offspring
-            mut_rate = 0.9 * (MUT_PROB_0**ep) + 0.1
-            offspring = toolbox.clone(pop[0])
-            ind, = toolbox.mutate(offspring, indpb=mut_rate)
-            pop.append(ind)
+            fitnesses = [fitness_winner]
 
         # save the episode data
         ep_time = time.time() - ep_start_time
+        append_data(data, ind, ep_data, ep_time, model_dist, fitness_winner, fitness_loser)
 
-        data.append(list(ind) +
-                    list(np.array(ep_data).mean(axis=0)) +
-                    [datetime.today()] + [ep_time] + [model_dist] + fitnesses)
 
-        # build the episode data structure for statistics and write to .csv
-        if save_data:
-            save_data_at(DATA_PATH, data, ep)
+        # write data to .csv
+        save_data_at(DATA_PATH, data, ep) if params['save_data'] else None
 
+        reeval = True if random.random() < params['reeval_rate'] and not reeval else False
 
 
 if __name__ == "__main__":

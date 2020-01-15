@@ -16,6 +16,7 @@ from os import listdir
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns; sns.set()
 
 
 def create_plot(y, x):
@@ -28,10 +29,22 @@ def get_session_data(session, ):
 
 
 DATA_PATH = "data/"
-
 data_files = [DATA_PATH + filename for filename in listdir(DATA_PATH)]
+datasets = []
 
-data = get_session_data(session, )
+for file in data_files:
+    data = pd.read_csv(file)
+    datasets.append(data)
+
+dataset_sizes = [len(dataset) for dataset in datasets]
+data = datasets[np.argmax(dataset_sizes)]
+
+print(data.head(10))
+
+ax = sns.lineplot(x=data.index, y="fitness", data=data)
+plt.show()
+
+# compute the sum of the episode times to find out how long the script actually takes to run...
 
 # data = pd.read_csv(DATA_PATH)
 
