@@ -60,7 +60,7 @@ start_pop = 0
 recovery_mode = False
 
 if hardware:
-	rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
+	rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.43.176")
 else:
 	rob = robobo.SimulationRobobo("#0").connect(address='172.17.0.1', port=port) # 19997
 
