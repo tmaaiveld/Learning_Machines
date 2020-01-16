@@ -10,16 +10,16 @@ import robobo
 import numpy as np
 import pickle as pkl
 import os
-import json 
+import json
 import codecs
 import signal
 np.set_printoptions(suppress=True, formatter={'float_kind':'{:0.2f}'.format})
 
-actions = {'forward': (20.0, 20.0),
-           'left': (10.0, 20.0),
-           'right': (20.0, 10.0),
-           'forward_slow': (10.0, 10.0),
-           'backward': (-15.0, -15.0)
+actions = {'forward': (15.0, 15.0),
+           'left': (15.0, 25.0),
+           'right': (25.0, 10.0),
+           'slow_down': (10.0, 10.0),
+           'backwards': (-15.0, -15.0)
            }  # 'backward': (-25,-25)
 
 #actions = {'forward': (30.0, 30.0),
@@ -38,31 +38,31 @@ actions = {'forward': (20.0, 20.0),
 
 hardware = False
 port = 19997
-kill_on_crash = True
-base_name = "experiments_#0_elitism"
+kill_on_crash = False
+base_name = "experiments/perceptron_elitism"
+full_speed = 30
 if kill_on_crash:
 	base_name += "_killoncrash"
 base_name += "_port"+str(port)
+penalize_backwards = True
 
-n_hidden_neurons = 10
-
-step_size_ms = 500
-sim_length_s = 30.0
+n_hidden_neurons = 0
+n_out = 3
+step_size_ms = 250
+sim_length_s = 60.0
 
 dom_u = 1
 dom_l = -1
-npop = 20
+npop = 10
 gens = 10
-mutation = 0.05
-last_best = 0
+mutation = 0.1
 cross_prob = 0.5
-start_pop = 0
 recovery_mode = False
 
 if hardware:
 	rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
 else:
-	rob = robobo.SimulationRobobo("#0").connect(address='172.17.0.1', port=port) # 19997
+	rob = robobo.SimulationRobobo().connect(address='172.17.0.1', port=port) # 19997
 
 def eval(x):
 	global experiment_name
@@ -84,12 +84,13 @@ def eval(x):
 	while sim_length_ms > elapsed_time:
 		print("--------------------------\nElapsed time: "+str(elapsed_time))
 		input = np.log(rob.read_irs()).astype(float)
-		input[input == -inf] = 0.01
+		input[input == -inf] = 0.0
 		print("Observed:\n"+str(input))
 
-		nn = player_controller(n_hidden_neurons)
+		nn = player_controller(n_hidden_neurons, n_out)
 
-		left, right = actions[nn.control(input, np.array(x))]
+		# left, right = actions[nn.control(input, np.array(x))]
+		left, right = nn.control(input, np.array(x))
 		print("\nMovement:\nleft="+str(left)+"\nright="+str(right))
 		rob.move(left, right, step_size_ms)
 		elapsed_time += step_size_ms
@@ -101,7 +102,7 @@ def eval(x):
 		else:
 			if kill_on_crash:
 				# Penalize by ending the episode early
-				print("Robot crashed, ending eposide")			
+				print("Robot crashed, ending eposide")
 				break
 			fitness += get_fitness(left, right, input)
 	print("Evaluation done, final fitness:"+str(fitness))
@@ -109,7 +110,7 @@ def eval(x):
 	rob.stop_world()
 	# np.savetxt(experiment_name_new+str(int(fitness))+".txt",np.array(x))
 	json_file = experiment_name_new+str(int(fitness))+".json"
-	i = 0	
+	i = 0
 	while os.path.exists(json_file):
 		i += 1
 		json_file = experiment_name_new+str(int(fitness+i))+".json"
@@ -138,7 +139,7 @@ def detect_crash(rob, input, last_position):
 
 def get_fitness(left, right, input):
 	s_trans = abs(left) + abs(right)
-	rot_max = 12  # from (0,20)
+	rot_max = 30  # from (0,20)
 	rot_min = 0   # (30,30)
 	# Normalized rotation
 	s_rot = float((abs(left - right) - rot_min) / (rot_max - rot_min))
@@ -152,7 +153,7 @@ def get_fitness(left, right, input):
 	print("v_sens "+str(v_sens))
 	fit = s_trans * (1-s_rot) * (v_sens)
 	print("total: "+str(fit))
-	print("")	
+	print("")
 	return fit
 
 def terminate_program(signal_number, frame):
@@ -174,9 +175,10 @@ def sigmoid_activation(x):
 
 # implements controller structure for robobo
 class player_controller(Controller):
-	def __init__(self, _n_hidden):
+	def __init__(self, _n_hidden, _n_out):
 		# Number of hidden neurons
 		self.n_hidden = [_n_hidden]
+		self.n_out = _n_out
 
 	def control(self, inputs, controller):
 		# Normalises the input using min-max scaling
@@ -196,30 +198,35 @@ class player_controller(Controller):
 			output1 = sigmoid_activation(inputs.dot(weights1) + bias1)
 
 			# Preparing the weights and biases from the controller of layer 2
-			bias2 = controller[weights1_slice:weights1_slice + 5].reshape(1, 5)
-			weights2 = controller[weights1_slice + 5:].reshape((self.n_hidden[0], 5))
+			bias2 = controller[weights1_slice:weights1_slice + self.n_out].reshape(1, self.n_out)
+			weights2 = controller[weights1_slice + self.n_out:].reshape((self.n_hidden[0], self.n_out))
 
 			# Outputting activated second layer. Each entry in the output is an action
 			output = sigmoid_activation(output1.dot(weights2) + bias2)[0]
 			out = output1.dot(weights2) + bias2
 		else:
-			bias = controller[:5].reshape(1, 5)
-			weights = controller[5:].reshape((len(inputs), 5))
+			bias = controller[:self.n_out].reshape(1, self.n_out)
+			weights = controller[self.n_out:].reshape((len(inputs), self.n_out))
 
 			output = sigmoid_activation(inputs.dot(weights) + bias)[0]
 			out = inputs.dot(weights) + bias
 		print("OUT::\n"+str(output))
 		print("OUT RAW::\n"+str(out))
 		# takes decisions about robobos actions
-		ind = np.argmax(output)
-		print("index:"+str(ind))
-		action = actions.keys()[ind]
-		print("action:"+str(action))
-		return action
+		left = full_speed * output[0]
+		right = full_speed * output[1]
+		punish = 0
+		if penalize_backwards:
+			punish = 5
+		if self.n_out == 3:
+			if output[2] > 0.5:
+				left  = -left + punish
+				right = -right + punish
+		return left, right
 
 
-selections = {"NSGA2": tools.selNSGA2}#,
-#              "Tournament": tools.selTournament}
+#selections = {"NSGA2": tools.selNSGA2},
+selections = {"Tournament": tools.selTournament}
 
 for selection in selections.keys():
 
@@ -227,12 +234,12 @@ for selection in selections.keys():
 	# number of weights for multilayer with 10 hidden neurons
 	#
 	num_sensors = 8
-	n_vars = (num_sensors+1)*n_hidden_neurons + (n_hidden_neurons+1)*5
-
+	#n_vars = (num_sensors+1)*n_hidden_neurons + (n_hidden_neurons+1)*5
+	n_vars = (num_sensors+1)*n_out  # Simple perceptron
 	# n_vars = (num_sensors() + 1) * 5  # perceptron
 	# n_vars = (num_sensors()+1)*10 + 11*5  # multilayer with 10 neurons
 	# n_hidden = 50
-	# n_vars = (num_sensors()+1)*n_hidden + (n_hidden+1)*5 # multilayer with 50 neurons
+	# n_vars = (num_sensors+1)*n_hidden_neurons + (n_hidden_neurons+1)*3 # multilayer with 50 neurons and 3 outputs
 
 	experiment_name = base_name+"_" + selection+"/"
 	if not os.path.exists(experiment_name):
@@ -291,18 +298,18 @@ for selection in selections.keys():
 
 			population_old = toolbox.population_guess()
 			print("Loaded "+str(len(population_old))+" individuals from current generation")
-			fits_old = [(float(x.replace(".json","")),) for x in ls if "all_data" not in x]	
-	
+			fits_old = [(float(x.replace(".json","")),) for x in ls if "all_data" not in x]
+
 			if len(population_old) >= npop:
 				print("Skipping generation "+str(gen))
 				population = population_old
 				recovery_mode = False
 				continue
+
 			population = population[len(population_old):]
 
-		
 		population = algorithms.varAnd(population, toolbox, cxpb=cross_prob, mutpb=mutation)
-								
+
 		#offspring = offspring + population
 		fits = toolbox.map(toolbox.evaluate, population)
 
@@ -339,7 +346,7 @@ for selection in selections.keys():
 		print('\n GENERATION ' + str(gen) + ' ' + str(round(best_fit, 6)))
 		file_aux.write('\n' + str(gen) + ' ' + str(round(best_fit, 6)))
 		file_aux.close()
-		
+
 	#with open(experiment_name + "logbook.pkl", "wb") as f:
 #		pkl.dump(logbook, f)
 #	with open(experiment_name + "best.pkl", "wb") as f:

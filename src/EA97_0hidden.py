@@ -10,16 +10,16 @@ import robobo
 import numpy as np
 import pickle as pkl
 import os
-import json 
+import json
 import codecs
 import signal
 np.set_printoptions(suppress=True, formatter={'float_kind':'{:0.2f}'.format})
 
-actions = {'forward': (20.0, 20.0),
-           'left': (10.0, 20.0),
-           'right': (20.0, 10.0),
-           'forward_slow': (10.0, 10.0),
-           'backward': (-15.0, -15.0)
+actions = {'forward': (15.0, 15.0),
+           'left': (15.0, 25.0),
+           'right': (25.0, 10.0),
+           'slow_down': (10.0, 10.0),
+           'backwards': (-15.0, -15.0)
            }  # 'backward': (-25,-25)
 
 #actions = {'forward': (30.0, 30.0),
@@ -39,12 +39,12 @@ actions = {'forward': (20.0, 20.0),
 hardware = False
 port = 19997
 kill_on_crash = True
-base_name = "experiments_#0_elitism"
+base_name = "experiments_0_layers"
 if kill_on_crash:
 	base_name += "_killoncrash"
 base_name += "_port"+str(port)
 
-n_hidden_neurons = 10
+n_hidden_neurons = 0
 
 step_size_ms = 500
 sim_length_s = 30.0
@@ -52,7 +52,7 @@ sim_length_s = 30.0
 dom_u = 1
 dom_l = -1
 npop = 20
-gens = 10
+gens = 20
 mutation = 0.05
 last_best = 0
 cross_prob = 0.5
@@ -101,7 +101,7 @@ def eval(x):
 		else:
 			if kill_on_crash:
 				# Penalize by ending the episode early
-				print("Robot crashed, ending eposide")			
+				print("Robot crashed, ending eposide")
 				break
 			fitness += get_fitness(left, right, input)
 	print("Evaluation done, final fitness:"+str(fitness))
@@ -109,7 +109,7 @@ def eval(x):
 	rob.stop_world()
 	# np.savetxt(experiment_name_new+str(int(fitness))+".txt",np.array(x))
 	json_file = experiment_name_new+str(int(fitness))+".json"
-	i = 0	
+	i = 0
 	while os.path.exists(json_file):
 		i += 1
 		json_file = experiment_name_new+str(int(fitness+i))+".json"
@@ -227,8 +227,8 @@ for selection in selections.keys():
 	# number of weights for multilayer with 10 hidden neurons
 	#
 	num_sensors = 8
-	n_vars = (num_sensors+1)*n_hidden_neurons + (n_hidden_neurons+1)*5
-
+	#n_vars = (num_sensors+1)*n_hidden_neurons + (n_hidden_neurons+1)*5
+	n_vars = (num_sensors+1)*5  # Simple perceptron
 	# n_vars = (num_sensors() + 1) * 5  # perceptron
 	# n_vars = (num_sensors()+1)*10 + 11*5  # multilayer with 10 neurons
 	# n_hidden = 50
