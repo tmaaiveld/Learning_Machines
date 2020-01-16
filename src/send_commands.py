@@ -130,7 +130,12 @@ def take_step(rob, model, params):
     # time.sleep(0.1)
     IR = -abs(np.log(np.array(rob.read_irs())))
     IR[np.isinf(IR)] = 0
-    current_position = np.array(rob.position())
+
+    if params['hardware']:
+        current_position = np.array([0, 0, 0])
+    else:
+        current_position = np.array(rob.position())
+
 
     wheels = model.predict(np.expand_dims(IR, axis=0))[0] * params['m_max']
 
@@ -252,6 +257,7 @@ def main():
 
     # Initialization
     MODEL_PATH = "src/models/"
+    LOAD_MODEL = "src/model history/box_100ep_100ms"
     DATA_PATH = "src/data/"
     SIM_NUMBER = 0  # [0,1,2] -> box, pillars, maze
     LEARNING = True
@@ -285,7 +291,7 @@ def main():
         params['save_model'] = False
 
     if params['hardware']:
-        rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
+        rob = robobo.HardwareRobobo(camera=True).connect(address="172.20.10.4")
     else:
         rob = robobo.SimulationRobobo(number=["","#2","#0"][SIM_NUMBER]).connect(address='172.20.10.3', port=19997)
         # rob2 = robobo.SimulationRobobo(number=["","#2","#0"][1]).connect(address='172.20.10.2', port=19998)
@@ -294,7 +300,7 @@ def main():
     toolbox = init_deap(**params)
 
     if params['load_model']:
-        ind = toolbox.individual(MODEL_PATH=MODEL_PATH)
+        ind = toolbox.individual(MODEL_PATH=LOAD_MODEL)
     else:
         ind = toolbox.individual(init_bias=params['init_bias'])
 
@@ -315,7 +321,7 @@ def main():
 
         # start_sim(rob)
         signal.signal(signal.SIGINT, terminate_program)
-        rob.play_simulation()
+        rob.play_simulation() if not params['hardware'] else None
 
         model = init_nn_EC(input_dims=len(params['sens_names']), output_dims=2, ind=ind, dropout=LEARNING)
 
@@ -334,7 +340,9 @@ def main():
             print_ui(step_data['IR'], step_data['position'], step_data['wheels'],
                      model, fitnesses, start_time, ep, i, params['step_count'])
 
-            # time.sleep(1)  # if on slow computer
+            time.sleep(1)  # if on slow computer
+            # if params['hardware']:
+            #     time.sleep(params['step_size_ms'] / 1000.0)
 
 
         ########## EVOLUTION ##########
