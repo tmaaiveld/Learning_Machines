@@ -6,9 +6,9 @@ params = {
 
         'sens_names': ["IR" + str(i + 1) for i in range(8)],
         'ep_count': 1000,
-        'step_count': 200,
-        'step_size_ms': 100,
-        'C': 2.0,
+        'step_count': 60,
+        'step_size_ms': 600,
+        'C': 1.0,
         'min_value': -1.,
         'max_value': 1.,
         'min_strategy': -1.,
@@ -19,5 +19,5 @@ params = {
         'recovery_time': 5,
         'init_bias': True,
         'reeval_rate': 0.2,
-        'max_sens': 6.3
+        'max_sens': 8.4
 }

@@ -125,28 +125,26 @@ def checkStrategy(minstrategy):
     return decorator
 
 
-def take_step(rob, model, params):
+def take_step(rob, model, ir, params):
 
-    # time.sleep(0.1)
-    IR = -abs(np.log(np.array(rob.read_irs())))
-    IR[np.isinf(IR)] = 0
+    ir = -abs(np.log(np.array(ir)))
+    ir[np.isinf(ir)] = 0
 
     if params['hardware']:
         current_position = np.array([0, 0, 0])
     else:
         current_position = np.array(rob.position())
 
-
-    wheels = model.predict(np.expand_dims(IR, axis=0))[0] * params['m_max']
+    wheels = model.predict(np.expand_dims(ir, axis=0))[0] * params['m_max']
 
     rob.move(wheels[0], wheels[1], params['step_size_ms'])
 
     step_data = {
         "s_trans": wheels[0] + wheels[1],
         "s_rot": abs(wheels[0] - wheels[1]) / (2 * params['m_max']),
-        "v_sens": min(max(-IR) / params['max_sens'], 1),
-        "v_total": abs(sum(IR)),
-        "IR": IR,
+        "v_sens": min(max(-ir) / params['max_sens'], 1),
+        "v_total": abs(sum(ir)),
+        "IR": ir,
         "wheels": wheels,
         "position": current_position
     }
@@ -218,7 +216,6 @@ def learn(toolbox, ep_data, ep, reeval, ind, pop, fitnesses, step_count,
 
 def evaluate(data, recovery_time):
     """Fitness as defined in Eiben et al. 2015"""
-
     return (data['s_trans'] * (1 - data['s_rot']) * (1 - data['v_sens']))[recovery_time:].sum()
 
 
@@ -257,34 +254,10 @@ def main():
 
     # Initialization
     MODEL_PATH = "src/models/"
-    LOAD_MODEL = "src/model history/box_100ep_100ms"
+    LOAD_MODEL = "src/model history/model_500ms"
     DATA_PATH = "src/data/"
     SIM_NUMBER = 0  # [0,1,2] -> box, pillars, maze
     LEARNING = True
-
-    # params = {
-    #     'hardware': False,
-    #     'load_model': False,
-    #     'save_model': True,
-    #     'save_data': True,
-    #
-    #     'sens_names': ["IR" + str(i + 1) for i in range(8)],
-    #     'ep_count': 1000,
-    #     'step_count': 10,
-    #     'step_size_ms': 100,
-    #     'C': 2.0,
-    #     'min_value': -1.,
-    #     'max_value': 1.,
-    #     'min_strategy': -1.,
-    #     'max_strategy': 1.,
-    #     'mut_prob_0': 0.92,
-    #     'mut_prob_base': 0.3,
-    #     'm_max': 20,
-    #     'recovery_time': 5,
-    #     'init_bias': True,
-    #     'reeval_rate': 0.5,
-    #     'max_sens': 6.1
-    # }
 
     if not LEARNING:
         params['reeval_rate'] = 0
@@ -293,7 +266,7 @@ def main():
     if params['hardware']:
         rob = robobo.HardwareRobobo(camera=True).connect(address="172.20.10.4")
     else:
-        rob = robobo.SimulationRobobo(number=["","#2","#0"][SIM_NUMBER]).connect(address='172.20.10.3', port=19997)
+        rob = robobo.SimulationRobobo(number=["","#2","#0"][SIM_NUMBER]).connect(address='192.168.1.73', port=19997)
         # rob2 = robobo.SimulationRobobo(number=["","#2","#0"][1]).connect(address='172.20.10.2', port=19998)
 
     print_welcome()
@@ -309,6 +282,7 @@ def main():
 
     data = []
     reeval = False
+    prev_irs = [0] * len(params['sens_names'])
 
 
     ########## MAIN ALGORITHM ##########
@@ -334,15 +308,25 @@ def main():
 
         for i in range(params['step_count']):
 
-            step_data = take_step(rob, model, params)
+            irs = np.array(rob.read_irs())
+
+            if params['hardware']:
+                irs =  irs * (1 + np.exp(2))
+                if irs == prev_irs:
+                    irs = [0] * len(params['sens_names'])
+
+            prev_irs = rob.read_irs()
+
+            step_data = take_step(rob, model, irs, params)
             ep_data.append(step_data)
 
             print_ui(step_data['IR'], step_data['position'], step_data['wheels'],
                      model, fitnesses, start_time, ep, i, params['step_count'])
 
-            time.sleep(1)  # if on slow computer
+            # time.sleep(1)  # if on slow computer
             # if params['hardware']:
             #     time.sleep(params['step_size_ms'] / 1000.0)
+
 
 
         ########## EVOLUTION ##########
