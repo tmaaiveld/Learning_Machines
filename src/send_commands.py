@@ -125,10 +125,11 @@ def checkStrategy(minstrategy):
     return decorator
 
 
-def take_step(rob, model, ir, params):
+def take_step(rob, model, ir, ir_filter, params):
 
     ir = -abs(np.log(np.array(ir)))
     ir[np.isinf(ir)] = 0
+    ir = np.where(ir < -ir_filter, ir, 0)
 
     if params['hardware']:
         current_position = np.array([0, 0, 0])
@@ -257,7 +258,8 @@ def main():
     LOAD_MODEL = "src/model history/model_500ms"
     DATA_PATH = "src/data/"
     SIM_NUMBER = 0  # [0,1,2] -> box, pillars, maze
-    LEARNING = True
+    LEARNING = False
+    IR_FILTER = -2.25
 
     if not LEARNING:
         params['reeval_rate'] = 0
@@ -308,25 +310,20 @@ def main():
 
         for i in range(params['step_count']):
 
+            # print(rob.read_irs())
             irs = np.array(rob.read_irs())
 
             if params['hardware']:
-                irs =  irs * (1 + np.exp(2))
-                if irs == prev_irs:
-                    irs = [0] * len(params['sens_names'])
+                irs = irs**0.65
 
-            prev_irs = rob.read_irs()
+            prev_irs.append(irs)
 
-            step_data = take_step(rob, model, irs, params)
+            # np.where((irs==prev_irs[-2]).all(), 0., irs)  # line is currently untested.
+            step_data = take_step(rob, model, irs, IR_FILTER)
             ep_data.append(step_data)
 
             print_ui(step_data['IR'], step_data['position'], step_data['wheels'],
                      model, fitnesses, start_time, ep, i, params['step_count'])
-
-            # time.sleep(1)  # if on slow computer
-            # if params['hardware']:
-            #     time.sleep(params['step_size_ms'] / 1000.0)
-
 
 
         ########## EVOLUTION ##########
