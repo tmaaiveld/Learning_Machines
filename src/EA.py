@@ -15,31 +15,38 @@ import codecs
 import signal
 np.set_printoptions(suppress=True, formatter={'float_kind':'{:0.2f}'.format})
 
-actions = {'forward': (30.0, 30.0),
+actions = {'forward': (20.0, 20.0),
            'left': (10.0, 20.0),
            'right': (20.0, 10.0),
-           'sharp left': (10.0, 30.0),
-           'sharp right': (30.0, 10.0)
+           'forward_slow': (10.0, 10.0),
+           'backward': (-15.0, -15.0)
            }  # 'backward': (-25,-25)
 
-#actions = {'forward': (40, 40),
-#           'left': (15, 30),
-#           'right': (30, 15),
-#           'sharp left': (-20, 20),
-#           'sharp right': (20, -20)
+#actions = {'forward': (30.0, 30.0),
+#           'left': (10.0, 20.0),
+#           'right': (20.0, 10.0),
+#           'sharp left': (10.0, 30.0),
+#           'sharp right': (30.0, 10.0)
+#           }  # 'backward': (-25,-25)
+
+#actions = {'forward': (20, 20),
+#           'left': (10, -10),
+#           'right': (-10, 10),
+#           'sharp left': (20, -20),
+#           'sharp right': (-20, 20)
 #           }  # 'backward': (-25,-25)
 
 hardware = False
 port = 19997
-kill_on_crash = False
-base_name = "experiments"
+kill_on_crash = True
+base_name = "experiments_#0_elitism"
 if kill_on_crash:
 	base_name += "_killoncrash"
 base_name += "_port"+str(port)
 
 n_hidden_neurons = 10
 
-step_size_ms = 250
+step_size_ms = 500
 sim_length_s = 30.0
 
 dom_u = 1
@@ -55,29 +62,29 @@ recovery_mode = False
 if hardware:
 	rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
 else:
-	rob = robobo.SimulationRobobo().connect(address='172.17.0.1', port=port) # 19997
-	rob.stop_world()
-	time.sleep(0.1)
+	rob = robobo.SimulationRobobo("#0").connect(address='172.17.0.1', port=port) # 19997
 
 def eval(x):
 	global experiment_name
 	global gen
 	print("starting evaluation")
-
+	rob.stop_world()
+	time.sleep(0.1)
 	signal.signal(signal.SIGINT, terminate_program)
 	# start_simulation(rob)
-	time.sleep(2)
+#	time.sleep(2)
 	rob.play_simulation()
-	time.sleep(2)
+#	time.sleep(2)
 
 	elapsed_time = 0
 	fitness = 0
+	positions = []
 	last_position = np.array([0,0,0])
 	sim_length_ms = sim_length_s * 1000
 	while sim_length_ms > elapsed_time:
 		print("--------------------------\nElapsed time: "+str(elapsed_time))
 		input = np.log(rob.read_irs()).astype(float)
-		input[input == -inf] = 0
+		input[input == -inf] = 0.01
 		print("Observed:\n"+str(input))
 
 		nn = player_controller(n_hidden_neurons)
@@ -87,6 +94,7 @@ def eval(x):
 		rob.move(left, right, step_size_ms)
 		elapsed_time += step_size_ms
 		crashed, last_position = detect_crash(rob, input, last_position)
+		positions.append(last_position)
 		if not crashed:
 			fitness += get_fitness(left, right, input)
 			print("Total Fitness: "+str(fitness))
@@ -95,42 +103,48 @@ def eval(x):
 				# Penalize by ending the episode early
 				print("Robot crashed, ending eposide")			
 				break
-			# Penalize by giving no fitness
-			print("Penalizing crash with no fitness")
-			pass
+			fitness += get_fitness(left, right, input)
 	print("Evaluation done, final fitness:"+str(fitness))
 	print("--------------------------")
 	rob.stop_world()
 	# np.savetxt(experiment_name_new+str(int(fitness))+".txt",np.array(x))
 	json_file = experiment_name_new+str(int(fitness))+".json"
+	i = 0	
+	while os.path.exists(json_file):
+		i += 1
+		json_file = experiment_name_new+str(int(fitness+i))+".json"
+		print("Renaming duplicate: "+str(fitness))
 	json.dump(x,codecs.open(json_file, "w", encoding="utf-8"), indent = 4)
 	file_fit = open(experiment_name + 'results.txt', 'a')
 	file_fit.write('\n' + str(gen) + ' ' + str(round(fitness, 6)))
 	file_fit.close()
+	file_pos = open(experiment_name + 'positions.txt', 'a')
+	file_pos.write('\n' + str(gen) + ' ' + str(positions))
+	file_pos.close()
 	return (fitness,)
 
 def detect_crash(rob, input, last_position):
 	current_position = np.array(rob.position())
-	sensor_bound = -4
+	sensor_bound = -5.5
 	position_bound = .001
 	print("last position: "+str(last_position))
 	print("current position: "+str(current_position))
 	dist = np.linalg.norm(last_position - current_position)
 	print("Detecting crash:\nsensor\n"+str(input)+"\n\ndist:\n"+str(dist))
-	if min(input[3:] / 10) < sensor_bound or dist < position_bound:
+	if min(input) < sensor_bound:# or dist < position_bound:
 		print("CRASH!")
 		return True, current_position
 	return False, current_position
 
 def get_fitness(left, right, input):
-	s_trans = left + right
-	rot_max = 30  # from (0,20)
+	s_trans = abs(left) + abs(right)
+	rot_max = 12  # from (0,20)
 	rot_min = 0   # (30,30)
 	# Normalized rotation
 	s_rot = float((abs(left - right) - rot_min) / (rot_max - rot_min))
 	v_max = 0
-	v_min = -35
-	v_sens = (sum(input[3:]) - v_min) / (v_max - v_min)
+	v_min = -74
+	v_sens = (sum(input) - v_min) / (v_max - v_min)
 	print("")
 	print("Fitness: ")
 	print("s_trans "+str(s_trans))
@@ -166,7 +180,8 @@ class player_controller(Controller):
 
 	def control(self, inputs, controller):
 		# Normalises the input using min-max scaling
-		inputs = (inputs - min(inputs)) / float((max(inputs) - min(inputs)))
+#		inputs = (inputs - min(inputs)) / float((max(inputs) - min(inputs)))
+#		print("Inputs NN:"+str(inputs))
 
 		if self.n_hidden[0] > 0:
 			# Preparing the weights and biases from the controller of layer 1
@@ -186,15 +201,20 @@ class player_controller(Controller):
 
 			# Outputting activated second layer. Each entry in the output is an action
 			output = sigmoid_activation(output1.dot(weights2) + bias2)[0]
+			out = output1.dot(weights2) + bias2
 		else:
 			bias = controller[:5].reshape(1, 5)
 			weights = controller[5:].reshape((len(inputs), 5))
 
 			output = sigmoid_activation(inputs.dot(weights) + bias)[0]
-
+			out = inputs.dot(weights) + bias
+		print("OUT::\n"+str(output))
+		print("OUT RAW::\n"+str(out))
 		# takes decisions about robobos actions
 		ind = np.argmax(output)
+		print("index:"+str(ind))
 		action = actions.keys()[ind]
+		print("action:"+str(action))
 		return action
 
 
@@ -245,14 +265,15 @@ for selection in selections.keys():
 
 	population = toolbox.population(n=npop)
 	i = 0
+	all_gens = population
 
 	for gen in range(gens):
 		experiment_name_new = experiment_name + "gen_" + str(gen) + "/"
 		if not os.path.exists(experiment_name_new):
 			os.makedirs(experiment_name_new)
 		elif len(os.listdir(experiment_name_new)) > 0:
-			print("listdir: ",os.listdir(experiment_name_new))
-			recovery = True
+			print("listdir "+str(experiment_name_new)+" :",os.listdir(experiment_name_new))
+			recovery_mode = True
 		if recovery_mode:
 			print("------------\nRECOVERY")
 			ls = os.listdir(experiment_name_new)
@@ -268,41 +289,48 @@ for selection in selections.keys():
 			toolbox.register("individual_guess", initIndividual, creator.Individual)
 			toolbox.register("population_guess", initPopulation, list, toolbox.individual_guess, experiment_name_new+"all_data.json")
 
-
 			population_old = toolbox.population_guess()
+			print("Loaded "+str(len(population_old))+" individuals from current generation")
 			fits_old = [(float(x.replace(".json","")),) for x in ls if "all_data" not in x]	
 	
-			print("LENGTH pop old:"+str(len(population_old)))
 			if len(population_old) >= npop:
 				print("Skipping generation "+str(gen))
 				population = population_old
 				recovery_mode = False
 				continue
 			population = population[len(population_old):]
-			# Recover old fitness values
-							
-		offspring = algorithms.varAnd(population, toolbox, cxpb=cross_prob, mutpb=mutation)
+
+		
+		population = algorithms.varAnd(population, toolbox, cxpb=cross_prob, mutpb=mutation)
+								
 		#offspring = offspring + population
-		fits = toolbox.map(toolbox.evaluate, offspring)
+		fits = toolbox.map(toolbox.evaluate, population)
+
 
 		if recovery_mode:
 			fits = fits + fits_old
-			population = offspring + population_old
+			population = population + population_old
 
 		print("Fits", fits)
-		for fit, ind in zip(fits, offspring):
+		for fit, ind in zip(fits, population):
 			ind.fitness.values = fit
 		if selection == "NSGA2":
-			population = toolbox.select(offspring, k=npop)
+			population = toolbox.select(population, k=npop-1)
 		elif selection == "Tournament":
-			population = toolbox.select(offspring, k=npop, tournsize=3)
-		best = tools.selBest(population, k=1)
+			population = toolbox.select(population, k=npop-1, tournsize=3)
+
+		all_gens += population
+		elite = tools.selBest(all_gens, k=1)
+
+		population += elite
 
 		record = stats.compile(population)
 
+		#population = best_50 + toolbox.population(n=npop/2)
+
 		# saves simulation state
 		logbook.record(gen=gen, evals=30, **record)
-		solutions = [offspring, fits]
+		solutions = [population, fits]
 
 		best_fit = logbook.select("max")[0][0]
 

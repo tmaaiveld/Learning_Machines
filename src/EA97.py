@@ -51,8 +51,8 @@ sim_length_s = 30.0
 
 dom_u = 1
 dom_l = -1
-npop = 20
-gens = 20
+npop = 21
+gens = 21
 mutation = 0.05
 last_best = 0
 cross_prob = 0.5
