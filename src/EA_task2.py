@@ -97,9 +97,9 @@ def eval(x):
 		print("Total Fitness: "+str(fitness))
 	print("Evaluation done, final fitness:"+str(fitness))
 	print("--------------------------")
-	
+
 	# Weigh fitness by collected food
-	print("final fitness: "+str(fitness))	
+	print("final fitness: "+str(fitness))
 	collected_food = float(rob.collected_food())
 	food_factor = collected_food / max_food
 	fitness_final = food_factor * fitness
