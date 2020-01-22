@@ -1,5 +1,6 @@
 from controller import Controller
 from numpy import inf
+import imutils
 import time
 import robobo
 import numpy as np
@@ -9,6 +10,7 @@ import os
 import json
 import codecs
 import signal
+import cv2
 np.set_printoptions(suppress=True, formatter={'float_kind':'{:0.2f}'.format})
 
 def sigmoid_activation(x):
@@ -27,15 +29,77 @@ print("Test")
 brain_2 = "brains/gen_8/11071.json"
 var = 0.5
 
-lower_green = np.array([36,25,25])
-upper_green = np.array([86,255,255])
-img_hsv = cv2.cvtColor(x, cv2.COLOR_BGR2HSV)
-mask = cv2.inRange(img_hsv, lower_green, upper_green)
-imask = mask > 0
-img_green = np.zeros_like(x, np.uint8)
-img_green[imask] = x[imask]
-cv2.imwrite("g.png", img_green)
+def turn_45():
+	rob.move(60, -60, 200)
 
+def save_image(name):
+	x = rob.get_image_front()
+	lower_green = np.array([36,50,50])
+	upper_green = np.array([86,255,255])
+	img_hsv = cv2.cvtColor(x, cv2.COLOR_BGR2HSV)
+	mask = cv2.inRange(img_hsv, lower_green, upper_green)
+	imask = mask > 0
+	img_green = np.zeros_like(x, np.uint8)
+	img_green[imask] = x[imask]
+	cv2.imwrite(name+".png", img_green)
+
+def get_box():
+	food = False
+	image = rob.get_image_front()
+	lower_green = np.array([36,50,50])
+	upper_green = np.array([86,255,255])
+	img_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+	mask = cv2.inRange(img_hsv, lower_green, upper_green)
+	mask = cv2.erode(mask, None, iterations=6)
+	mask = cv2.dilate(mask, None, iterations=6)
+	
+	contours = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,
+                        cv2.CHAIN_APPROX_SIMPLE)
+
+	contours = imutils.grab_contours(contours)
+	center = None
+	# Initialize h for checking for the highest in the loop
+	previous_h = 0
+	if contours:
+		for contour in contours:
+			x, y, w, h = cv2.boundingRect(contour)
+			if h > previous_h:
+				largest_contour = contour
+				previous_h = h
+				best_x, best_y, best_w, best_h = x, y, w, h
+			print(x, y, w, h)
+		image = cv2.rectangle(image, (best_x, best_y), (best_x + best_w, best_y + best_h), (0, 255, 0), 2)
+
+		print('contour',contour)
+
+		
+		#if best_h > 20 and best_w > 20:
+		food = True
+	cv2.imwrite('box.png',image)
+	
+	return food
+
+
+def search_food():
+	food = False
+	
+	return food
+
+def explore():
+	found_food = False
+	rob.set_phone_tilt(90, 100, 1)
+	while not found_food:
+		turn_45()
+		time.sleep(2)
+		print("Did not find food yet :(")
+		time.sleep(2)		
+		found_food = get_box()
+	print("Found food!!")
+
+def exploit():
+	food_present = True
+	while food_present:
+		pass
 
 # implements controller structure for robobo
 class player_controller(Controller):
@@ -95,6 +159,7 @@ def terminate_program(signal_number, frame):
 	sys.exit(1)
 
 rob = robobo.HardwareRobobo(camera=True).connect(address="10.15.3.52")#, port=19997)
+get_box()
 """
 # signal.signal(signal.SIGINT, terminate_program)
 # start_simulation(rob)

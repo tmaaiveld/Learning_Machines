@@ -59,7 +59,7 @@ mutation = 0.1
 cross_prob = 0.5
 recovery_mode = False
 
-rob = robobo.HardwareRobobo(camera=False).connect(address="192.168.1.7")
+rob = robobo.HardwareRobobo(camera=False).connect(address="10.15.3.52")
 
 def eval(x):
 	global experiment_name

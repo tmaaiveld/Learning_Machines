@@ -15,27 +15,6 @@ import codecs
 import signal
 np.set_printoptions(suppress=True, formatter={'float_kind':'{:0.2f}'.format})
 
-actions = {'forward': (15.0, 15.0),
-           'left': (15.0, 25.0),
-           'right': (25.0, 10.0),
-           'slow_down': (10.0, 10.0),
-           'backwards': (-15.0, -15.0)
-           }  # 'backward': (-25,-25)
-
-#actions = {'forward': (30.0, 30.0),
-#           'left': (10.0, 20.0),
-#           'right': (20.0, 10.0),
-#           'sharp left': (10.0, 30.0),
-#           'sharp right': (30.0, 10.0)
-#           }  # 'backward': (-25,-25)
-
-#actions = {'forward': (20, 20),
-#           'left': (10, -10),
-#           'right': (-10, 10),
-#           'sharp left': (20, -20),
-#           'sharp right': (-20, 20)
-#           }  # 'backward': (-25,-25)
-
 hardware = False
 port = 19997
 kill_on_crash = False
