@@ -39,7 +39,7 @@ actions = {'forward': (15.0, 15.0),
 hardware = False
 port = 19997
 kill_on_crash = False
-base_name = "experiments/perceptron_elitism"
+base_name = "experiments/perceptron_elitism_last_arena"
 full_speed = 30
 if kill_on_crash:
 	base_name += "_killoncrash"
@@ -53,8 +53,8 @@ sim_length_s = 60.0
 
 dom_u = 1
 dom_l = -1
-npop = 10
-gens = 10
+npop = 20
+gens = 20
 mutation = 0.1
 cross_prob = 0.5
 recovery_mode = False
@@ -62,7 +62,7 @@ recovery_mode = False
 if hardware:
 	rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
 else:
-	rob = robobo.SimulationRobobo().connect(address='172.17.0.1', port=port) # 19997
+	rob = robobo.SimulationRobobo("#0").connect(address='172.17.0.1', port=port) # 19997
 
 def eval(x):
 	global experiment_name
@@ -222,6 +222,10 @@ class player_controller(Controller):
 			if output[2] > 0.5:
 				left  = -left + punish
 				right = -right + punish
+				if left >= 0:
+					left = -left
+				if right >= 0:
+					right = -right
 		return left, right
 
 

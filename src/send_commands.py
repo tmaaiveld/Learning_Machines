@@ -71,228 +71,228 @@ from vrep import VrepApiError
 
 
 def terminate_program(signal_number, frame):
-    print("Ctrl-C received, terminating program\n\n")
-    sys.exit(1)
+	print("Ctrl-C received, terminating program\n\n")
+	sys.exit(1)
 
 
 def start_simulation(rob):
-    try:
-        time.sleep(5)
-        rob.play_simulation()
-        time.sleep(5)
-        np.array(rob.position())
+	try:
+		time.sleep(5)
+		rob.play_simulation()
+		time.sleep(5)
+		np.array(rob.position())
 
-    except:
-        print("Simulation startup failed. Retrying...")
-        time.sleep(1)
-        start_simulation(rob)
+	except:
+		print("Simulation startup failed. Retrying...")
+		time.sleep(1)
+		start_simulation(rob)
 
-    print("starting at position {}".format(rob.position()))
+	print("starting at position {}".format(rob.position()))
 
 
 def e_greedy_action(Q, A, e=0.1):
-    action = e_greedy(Q, e)
-    wheel = A[action]
-    return action, {'left': wheel[0], 'right': wheel[1]}
+	action = e_greedy(Q, e)
+	wheel = A[action]
+	return action, {'left': wheel[0], 'right': wheel[1]}
 
 
 def e_greedy(Q, e=0.1):
-    if random.random() < e:
-        return random.randint(0, len(Q)-1)
-    else:
-        return np.random.choice(np.where(Q == Q.max())[0])
+	if random.random() < e:
+		return random.randint(0, len(Q)-1)
+	else:
+		return np.random.choice(np.where(Q == Q.max())[0])
 
 
 def main():
 
-    global crashed
+	global crashed
 
-    EP_COUNT = 100
-    STEP_COUNT = 50
-    STEP_SIZE_MS = 250
-    CRASH_SENSOR_BOUNDARY = -0.45  # negative for simulation, positive for RW. Not used right now
-    CRASH_POSITION_BOUNDARY = 0.005
+	EP_COUNT = 100
+	STEP_COUNT = 50
+	STEP_SIZE_MS = 250
+	CRASH_SENSOR_BOUNDARY = -0.45  # negative for simulation, positive for RW. Not used right now
+	CRASH_POSITION_BOUNDARY = 0.005
 
-    A = [(20,20), (0,20), (20,0)]#, (10,5), (5,10)]  # (-25,-25),
-    epsilon = 0.25
-    epsilon_decaying = 0.5
-    gamma = 0.1
-    recency_factor = 0.01  # higher parameter setting -> forget older information faster
-    # proximity_factor = 1  # how heavily to penalize proximity to obstacle
+	A = [(20,20), (0,20), (20,0)]#, (10,5), (5,10)]  # (-25,-25),
+	epsilon = 0.25
+	epsilon_decaying = 0.5
+	gamma = 0.1
+	recency_factor = 0.01  # higher parameter setting -> forget older information faster
+	# proximity_factor = 1  # how heavily to penalize proximity to obstacle
 
-    ACTION_NAMES = ['forward', 'sharp left', 'sharp right']  # 'left', 'right']  # 'backward',
-    SENS_NAMES = ["IR" + str(i + 1) for i in range(8)]
+	ACTION_NAMES = ['forward', 'sharp left', 'sharp right']  # 'left', 'right']  # 'backward',
+	SENS_NAMES = ["IR" + str(i + 1) for i in range(8)]
 
-    # Initialize the robot -> SET THESE PARAMETERS!
-    hardware = False
-    # nn_from_file = True if input('Would you like to use a pre-trained neural network? (y/n') == 'y' else False
-    nn_from_file = False
-    learning = True  # Disable this if you want to run a pre-trained network
-    if nn_from_file is True:
-        print('loading network, disabling learning...')
-        learning = False
+	# Initialize the robot -> SET THESE PARAMETERS!
+	hardware = False
+	# nn_from_file = True if input('Would you like to use a pre-trained neural network? (y/n') == 'y' else False
+	nn_from_file = False
+	learning = True  # Disable this if you want to run a pre-trained network
+	if nn_from_file is True:
+		print('loading network, disabling learning...')
+		learning = False
 
-    if hardware:
-        rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
-    else:
-        rob = robobo.SimulationRobobo().connect(address='145.108.230.181', port=19997)
-        rob.stop_world()
-        time.sleep(0.1)
+	if hardware:
+		rob = robobo.HardwareRobobo(camera=True).connect(address="192.168.1.7")
+	else:
+		rob = robobo.SimulationRobobo().connect(address='145.108.230.181', port=19997)
+		rob.stop_world()
+		time.sleep(0.1)
 
-    if not learning:
-        epsilon = 0
-        epsilon_decaying = 0
+	if not learning:
+		epsilon = 0
+		epsilon_decaying = 0
 
-    # Initialize the data structure and neural network
-    eps = []
-    hidden_layers = [16, 12]
-    model = init_nn(input_dims=len(SENS_NAMES), output_dims=len(A),
-                    hidden_layers=hidden_layers, from_file=nn_from_file)
+	# Initialize the data structure and neural network
+	eps = []
+	hidden_layers = [16, 12]
+	model = init_nn(input_dims=len(SENS_NAMES), output_dims=len(A),
+	                hidden_layers=hidden_layers, from_file=nn_from_file)
 
-    for episode in range(EP_COUNT):
+	for episode in range(EP_COUNT):
 
-        data = EpisodeData(ACTION_NAMES, sens_names=SENS_NAMES)
+		data = EpisodeData(ACTION_NAMES, sens_names=SENS_NAMES)
 
-        signal.signal(signal.SIGINT, terminate_program)
-        # start_simulation(rob)
-        time.sleep(5)
-        rob.play_simulation()
-        time.sleep(5)
+		signal.signal(signal.SIGINT, terminate_program)
+		# start_simulation(rob)
+		time.sleep(5)
+		rob.play_simulation()
+		time.sleep(5)
 
-        ### INITIALIZATION ###
-        print('\n--- episode {} ---'.format(episode + 1))
+		### INITIALIZATION ###
+		print('\n--- episode {} ---'.format(episode + 1))
 
-        S = np.log(np.array(rob.read_irs()))
-        S[np.isinf(S)] = 0
-        last_position = np.array([0,0,0])
+		S = np.log(np.array(rob.read_irs()))
+		S[np.isinf(S)] = 0
+		last_position = np.array([0,0,0])
 
-        ########## Q-LEARNING LOOP ##########
+		########## Q-LEARNING LOOP ##########
 
-        crashed = False
+		crashed = False
 
-        for i in range(STEP_COUNT):
-            start_time = time.time()
+		for i in range(STEP_COUNT):
+			start_time = time.time()
 
-            print('\n--- step {} ---'.format(i+1))
+			print('\n--- step {} ---'.format(i+1))
 
-            # pos = rob.position()
+			# pos = rob.position()
 
-            ### ACTION SELECTION & EXECUTION ###
-            Q_s = model.predict(np.expand_dims(S, 0))[0]
+			### ACTION SELECTION & EXECUTION ###
+			Q_s = model.predict(np.expand_dims(S, 0))[0]
 
-            # request wheel speed parameters for max action
-            action, wheels = e_greedy_action(Q_s, A, epsilon)# epsilon_decaying ** (1 + (0.1 * episode)))
+			# request wheel speed parameters for max action
+			action, wheels = e_greedy_action(Q_s, A, epsilon)# epsilon_decaying ** (1 + (0.1 * episode)))
 
-            # move the robot
-            rob.move(wheels['left'], wheels['right'], STEP_SIZE_MS)
+			# move the robot
+			rob.move(wheels['left'], wheels['right'], STEP_SIZE_MS)
 
-            # if learning:
-            #     time.sleep(STEP_SIZE_MS/1000)
+			# if learning:
+			#     time.sleep(STEP_SIZE_MS/1000)
 
-            ### OBSERVING NEXT STATE ###
-            S_prime = np.log(np.array(rob.read_irs()))
-            S_prime[np.isinf(S_prime)] = 0
+			### OBSERVING NEXT STATE ###
+			S_prime = np.log(np.array(rob.read_irs()))
+			S_prime[np.isinf(S_prime)] = 0
 
-            print("ROB IRs: {}".format(S_prime / 10))
-            current_position = np.array(rob.position())
-            print("robobo is at {}".format(current_position))
+			print("ROB IRs: {}".format(S_prime / 10))
+			current_position = np.array(rob.position())
+			print("robobo is at {}".format(current_position))
 
-            # observe the reward
-            s_trans = wheels['left'] + wheels['right']  # translational speed of the robot
-            s_rot = abs(wheels['left'] - wheels['right'])  # rotational speed of the robot
+			# observe the reward
+			s_trans = wheels['left'] + wheels['right']  # translational speed of the robot
+			s_rot = abs(wheels['left'] - wheels['right'])  # rotational speed of the robot
 
-            if hardware:
-                crashed = False
-                raise NotImplementedError("Haven't implemented this, I suggest using a threshold for the sensor (see"
-                                          "code below this statement)")
-            else:
-                dist = np.linalg.norm(last_position - current_position)
-                crashed = min(S_prime[3:] / 10) < CRASH_SENSOR_BOUNDARY or dist < CRASH_POSITION_BOUNDARY
+			if hardware:
+				crashed = False
+				raise NotImplementedError("Haven't implemented this, I suggest using a threshold for the sensor (see"
+				                          "code below this statement)")
+			else:
+				dist = np.linalg.norm(last_position - current_position)
+				crashed = min(S_prime[3:] / 10) < CRASH_SENSOR_BOUNDARY or dist < CRASH_POSITION_BOUNDARY
 
-            if not crashed:
-                # reward = 1 + min(S) * proximity_factor  # - (wheels == A[1])
-                # see Eiben et al. for this formula
-                reward = s_trans * (1 - 0.9 * (s_rot / 20)) * (1 - (min(S_prime[3:]) / (5 * -0.065)))
-                # reward = s_trans * (1 - (s_rot/20)) * (1 - (min(S_prime[3:]) / (-0.65)))
-            else:
-                reward = -400
+			if not crashed:
+				# reward = 1 + min(S) * proximity_factor  # - (wheels == A[1])
+				# see Eiben et al. for this formula
+				reward = s_trans * (1 - 0.9 * (s_rot / 20)) * (1 - (min(S_prime[3:]) / (5 * -0.065)))
+				# reward = s_trans * (1 - (s_rot/20)) * (1 - (min(S_prime[3:]) / (-0.65)))
+			else:
+				reward = -400
 
-            # Retrieve Q values from neural network
-            Q_prime = model.predict(np.expand_dims(S_prime, 0))[0]
+			# Retrieve Q values from neural network
+			Q_prime = model.predict(np.expand_dims(S_prime, 0))[0]
 
-            ### LEARNING ###
+			### LEARNING ###
 
-            Q_target = reward + (gamma * np.argmax(Q_prime))
+			Q_target = reward + (gamma * np.argmax(Q_prime))
 
-            Q_targets = np.copy(Q_s)
-            Q_targets[action] = Q_target
+			Q_targets = np.copy(Q_s)
+			Q_targets[action] = Q_target
 
-            ### SAVE DATA ###
+			### SAVE DATA ###
 
-            # pos = np.array([1,2,3])
-            data.update(i, S, Q_s, Q_targets, reward)  # pos removed
+			# pos = np.array([1,2,3])
+			data.update(i, S, Q_s, Q_targets, reward)  # pos removed
 
-            ### TERMINATION CONDITION ###
+			### TERMINATION CONDITION ###
 
-            # if S == S_prime and not S.sum() == 0:  # np.isinf(S).any() is False:
-            #     print('Termination condition reached')
-            #     break
+			# if S == S_prime and not S.sum() == 0:  # np.isinf(S).any() is False:
+			#     print('Termination condition reached')
+			#     break
 
-            S = np.copy(S_prime)
-            last_position = current_position
+			S = np.copy(S_prime)
+			last_position = current_position
 
-            print("crashed: ", crashed)
-            print("chosen action:", ACTION_NAMES[action])
-            print('reward: ', reward)
-            print("Q_s (NN output): ", Q_s)
-            print("Updated Q-values: " + str(Q_targets))
+			print("crashed: ", crashed)
+			print("chosen action:", ACTION_NAMES[action])
+			print('reward: ', reward)
+			print("Q_s (NN output): ", Q_s)
+			print("Updated Q-values: " + str(Q_targets))
 
-            elapsed_time = time.time() - start_time
+			elapsed_time = time.time() - start_time
 
-            if crashed:
-                break
+			if crashed:
+				break
 
-        # terminate the episode data and store it
-        data.terminate()
-        eps.append(data)
+		# terminate the episode data and store it
+		data.terminate()
+		eps.append(data)
 
-        if learning:
+		if learning:
 
-            print("\n----- Learning ----\n")
-            X = pd.concat([ep_data.sens for ep_data in eps])
-            y = pd.concat([ep_data.Q_targets for ep_data in eps])
+			print("\n----- Learning ----\n")
+			X = pd.concat([ep_data.sens for ep_data in eps])
+			y = pd.concat([ep_data.Q_targets for ep_data in eps])
 
-            # # calculate sample weights
-            # ep_lengths = [len(ep_data.sens) for ep_data in eps[::-1]]
-            # sample_weights = []
-            #
-            # for i, ep_length in enumerate(ep_lengths):
-            #     sample_weights = sample_weights + ([(1 - recency_factor) ** i] * ep_length)
+			# # calculate sample weights
+			# ep_lengths = [len(ep_data.sens) for ep_data in eps[::-1]]
+			# sample_weights = []
+			#
+			# for i, ep_length in enumerate(ep_lengths):
+			#     sample_weights = sample_weights + ([(1 - recency_factor) ** i] * ep_length)
 
-            # perform learning over the episode
-            model.fit(X, y, epochs=100) #sample_weight=np.array(sample_weights))
+			# perform learning over the episode
+			model.fit(X, y, epochs=100) #sample_weight=np.array(sample_weights))
 
-        # # perform an evaluation of the episode (probably not necessary till later)
-        # model.evaluate(data)
+		# # perform an evaluation of the episode (probably not necessary till later)
+		# model.evaluate(data)
 
-        # time.sleep(0.1)
+		# time.sleep(0.1)
 
-        # pause the simulation and read the collected food
-        # rob.pause_simulation()
+		# pause the simulation and read the collected food
+		# rob.pause_simulation()
 
-        rob.sleep(1)
+		rob.sleep(1)
 
-        if crashed or episode == EP_COUNT:
-            # if learning:
-                save_nn(model)
-            print('Robot crashed, resetting simulation...')
-            data.terminate()
-            # could implement something here to save the experience if resetting the simulation!
+		if crashed or episode == EP_COUNT:
+			# if learning:
+			save_nn(model)
+		print('Robot crashed, resetting simulation...')
+		data.terminate()
+		# could implement something here to save the experience if resetting the simulation!
 
-        if crashed:
-            rob.stop_world()
+	if crashed:
+		rob.stop_world()
 
-    rob.stop_world()
+rob.stop_world()
 
 ## Test script ###
 
@@ -345,4 +345,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+	main()
