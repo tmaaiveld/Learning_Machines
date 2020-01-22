@@ -50,8 +50,8 @@ def get_box():
 	upper_green = np.array([86,255,255])
 	img_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 	mask = cv2.inRange(img_hsv, lower_green, upper_green)
-	mask = cv2.erode(mask, None, iterations=2)
-	mask = cv2.dilate(mask, None, iterations=2)
+	mask = cv2.erode(mask, None, iterations=6)
+	mask = cv2.dilate(mask, None, iterations=6)
 	
 	contours = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,
                         cv2.CHAIN_APPROX_SIMPLE)
@@ -73,8 +73,8 @@ def get_box():
 		print('contour',contour)
 
 		
-		if best_h > 20 and best_w > 20:
-			food = True
+		#if best_h > 20 and best_w > 20:
+		food = True
 	cv2.imwrite('box.png',image)
 	
 	return food
