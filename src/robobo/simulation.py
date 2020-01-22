@@ -142,9 +142,9 @@ class SimulationRobobo(Robobo):
         print("ROBOT EMOTION: {}".format(emotion))
 
     def move(self, left, right, millis=500):
-#        normalizer = 10.0
-#        left = left/normalizer
-#        right = right/normalizer
+        normalizer = 10.0
+        left = left/normalizer
+        right = right/normalizer
 
         self._vrep_set_joint_target_velocity(self._LeftMotor, left, vrep.simx_opmode_oneshot)
         self._vrep_set_joint_target_velocity(self._RightMotor, right, vrep.simx_opmode_oneshot)
