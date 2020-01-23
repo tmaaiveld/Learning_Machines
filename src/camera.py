@@ -49,14 +49,14 @@ class Camera:
         self.contours = imutils.grab_contours(self.contours)
 
         # lengths of axes of the image
-        x_ax = np.array(self.image).shape[1]
-        y_ax = np.array(self.image).shape[0]
+        x_ax = float(np.array(self.image).shape[1])
+        y_ax = float(np.array(self.image).shape[0])
 
 
         x = 0  # bigger it is, more central it is, smaller, more off
         y = None
         neg_x = 0  #129  # bigger it is, more central it is, smaller, more off
-        neg_y = 128  # --> smaller, more desirable
+        neg_y = 640  # --> smaller, more desirable
 
         if self.contours:
             # x,y is top left coordinate of rectangle
@@ -87,7 +87,7 @@ class Camera:
             save = cv2.imwrite(path, self.image)
             print('Image saved: {}'.format(save))
 
-        return x/128., neg_x/128., neg_y/128.
+        return x/x_ax, neg_x/x_ax, neg_y/y_ax
 
 
 

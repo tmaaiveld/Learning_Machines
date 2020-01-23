@@ -71,6 +71,10 @@ class HardwareRobobo(Robobo):
         millis: how many millisecond to move the robot
         """
         self._set_env()
+        # print(left_speed)
+        # print(right_speed)
+        # time.sleep(5)
+        left_speed, right_speed = int(left_speed), int(right_speed)
         self._move_srv(Int8(left_speed), Int8(right_speed), Int32(millis), Int16(blockid))
         time.sleep(millis/1000.0)
     
