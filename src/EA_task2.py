@@ -20,11 +20,11 @@ from camera import Camera
 
 # import imutils
 
-hardware = False
+hardware = True
 port = 19997
 kill_on_crash = False
 base_name = "experiments/test_food_foraging"
-full_speed = 20
+full_speed = 40
 if kill_on_crash:
     base_name += "_killoncrash"
 base_name += "_port" + str(port)
@@ -34,8 +34,8 @@ activation = 'tanh'
 n_hidden_neurons = 0
 num_sensors = 3 + 3
 n_out = 2
-step_size_ms = 150
-sim_length_s = 17.0
+step_size_ms = 400
+sim_length_s = 200.0
 max_food = 7.0
 collected_food = 0.0
 sensitivity = 30
@@ -45,25 +45,34 @@ n_vars = (num_sensors + 1) * n_out  # Simple perceptron
 dom_u = 1
 dom_l = -1
 npop = 10
-gens = 20
-mutation = 0.1
-cross_prob = 0.5
+gens = 21
+mutation = 0.
+cross_prob = 0.
 recovery_mode = False
 
-rob = robobo.SimulationRobobo().connect(address='172.20.10.3', port=port)  # 19997
+if hardware:
+    rob = robobo.HardwareRobobo(camera=True).connect(address="10.15.3.42")
+else:
+    rob = robobo.SimulationRobobo().connect(address='172.20.10.3', port=port)  # 19997
 
 
 def eval(x):
     global experiment_name
     global gen
     print("starting evaluation")
-    rob.stop_world()
+    if not hardware:
+        rob.stop_world()
     #	time.sleep(0.1)
     signal.signal(signal.SIGINT, terminate_program)
     # start_simulation(rob)
     #	time.sleep(2)
-    rob.play_simulation()
-    rob.set_phone_tilt(119.75, 1.0)  # tilting didn't seem to make sense in the simulation
+    if not hardware:
+        rob.play_simulation()
+        rob.set_phone_tilt(119.75, 1.0)  # tilting didn't seem to make sense in the simulation
+    else:
+        rob.set_phone_tilt(90, 4.0)
+        time.sleep(5)
+
     #	time.sleep(2)
 
     elapsed_time = 0
@@ -88,7 +97,11 @@ def eval(x):
         print('food:')
         print(food)
 
-        new_input = np.array(list(food_old) + list(food))
+        # new_input = 2.5 * (np.array(list(food_old) + list(food)))
+        new_input = (np.array(list(food_old) + list(food)))
+        new_input[0], new_input[3] = 2.*new_input[0], 2.*new_input[3]
+        # new_input[1], new_input[4] = 2.5 * new_input[1], 2.5 * new_input[4]
+        # time.sleep(1)
         print('inputs: \n{}'.format(new_input.reshape((2,3))))
 
         # collected_food = rob.collected_food()
@@ -127,7 +140,8 @@ def eval(x):
     # fitness += 100 * collected_food
     # fitness_final = fitness
 
-    rob.stop_world()
+    if not hardware:
+        rob.stop_world()
 
     print("Evaluation of the individual done")
     print("final fitness: {}".format(fitness))
