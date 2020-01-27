@@ -1,0 +1,76 @@
+todo
+- run sim in poles
+- hardware
+	> read the docs
+	> get robot working
+	> adapt code (if needed, custom script)
+
+- set up ssh?
+- plot
+	> model dist over time
+	> vsens over time (or something?)? sum_sens over time?
+- test hardware
+
+- - fill in TA doc
+- check phone for more
+
+ROBOT DRIVING PROJECT
+
+OBSERVATIONS [slide]
+- several observed patterns in simulation: 
+- general
+   > episode length strongly affects driving 
+	in box sim, short lengths result in straighter driving
+	
+
+box:
+    
+
+
+
+SLIDES
+
+Introduction?
+
+Problem definition
+	- slide on first approach (QL, 
+
+Methodology & exp setup
+	- tried q-learning with nn
+	- tried 2 variations of EC
+
+Results
+	- plots
+	- differences between the methods
+	- 
+
+Conclusions
+
+
+--- more ---
+
+- # MUCH easier way to implement reeval:
+mut = True
+
+	select(pop) <- perform selection, 
+		eval(pop) <- if mut apply fitness, if not mut calc reeval
+	mut = True
+	mutate(pop) <- pop has the fittest individual
+		if mut:
+			
+		with p=0.2 set mut to False
+
+can replace gene length with a constant IND_SIZE (or in params). makes it possible
+to change the gene length. Could also drop model saving and just import from the csv
+file, which has a history of all models.
+
+
+- email mark
+- email Johnathan
+
+
+- notes for the future
+	- could do better at learning discipline and structure when coding...
+	- could work more with dicts -> save all params in a big dict
+	- spend more time moving stuff in functions when programming
+

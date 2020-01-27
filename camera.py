@@ -60,15 +60,15 @@ class Camera:
             # x,y is top left coordinate of rectangle
             # x and y are distances from object in positive axes directions
             x, y, w, h = cv2.boundingRect(self.contours[0])
-            print("edges", x, y, w, h)
+            print("edges: {}, {}, {}, {}".format(x, y, w, h))
             # if w>20 and h>20:
             #add bounding box
             self.image = cv2.rectangle(self.image, (x, y), (x + w, y + h), (0, 255, 0), 2)
             # distances from object in negative axes directions
             neg_x = x_ax - x - w
             neg_y = y_ax - y - h
-            print('distance', x, y, neg_x, neg_y)
-            print('axis sum', neg_x+x+w, neg_y+y+h)
+            print('distance: {}, {}, {}, {}'.format(x, y, neg_x, neg_y))
+            print('axis sum: {}, {}'.format(neg_x+x+w, neg_y+y+h))
 
 
         cv2.imwrite("green.png", self.image)
