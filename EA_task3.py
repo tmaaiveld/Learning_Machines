@@ -13,6 +13,7 @@ import os
 import json
 import codecs
 import signal
+import prey
 
 np.set_printoptions(suppress=True, formatter={'float_kind': '{:0.2f}'.format})
 
@@ -20,7 +21,7 @@ from camera import Camera
 
 # import imutils
 
-hardware = True
+hardware = False
 port = 19997
 kill_on_crash = False
 base_name = "experiments/test_food_foraging"
@@ -46,14 +47,31 @@ dom_u = 1
 dom_l = -1
 npop = 10
 gens = 21
-mutation = 0.
-cross_prob = 0.
+mutation = 0.1
+cross_prob = 0.5
 recovery_mode = False
 
 if hardware:
     rob = robobo.HardwareRobobo(camera=True).connect(address="10.15.3.42")
+
+    # rob.set_phone_tilt(90, 4.0)
+    # time.sleep(5)
 else:
-    rob = robobo.SimulationRobobo().connect(address='172.20.10.3', port=port)  # 19997
+    #145.108.65.66
+    rob = robobo.SimulationRobobo().connect(address='172.17.0.1', port=port)  # 19997
+
+    # rob.play_simulation()
+
+    prey_robot = robobo.SimulationRoboboPrey().connect(address='172.17.0.1', port=19989)
+
+    prey_controller = prey.Prey(robot=prey_robot, level=2)
+
+    # prey_controller.start()
+
+    rob.set_phone_tilt(120, 4.0)
+    time.sleep(5)
+
+
 
 
 def eval(x):
@@ -68,6 +86,8 @@ def eval(x):
     #	time.sleep(2)
     if not hardware:
         rob.play_simulation()
+        # TODO: Not sure if this or in the beginning is the appropriate place to start
+        prey_controller.start()
         rob.set_phone_tilt(119.75, 1.0)  # tilting didn't seem to make sense in the simulation
     else:
         rob.set_phone_tilt(90, 4.0)
@@ -85,6 +105,7 @@ def eval(x):
     nn = player_controller(n_hidden_neurons, n_out)
 
     step = 0
+    dist = 0
     while sim_length_ms > elapsed_time:
         print("\n--------------------------\nElapsed time: " + str(elapsed_time) + "\n")
         # input = np.log(rob.read_irs()).astype(float)
@@ -92,7 +113,7 @@ def eval(x):
 
         image = rob.get_image_front()
         img = Camera(image)
-        food = np.array(img.capture_food_image(sensitivity, step))
+        food = np.array(img.capture_prey_image(sensitivity, step))
 
         print('food:')
         print(food)
@@ -116,6 +137,10 @@ def eval(x):
         # crashed, last_position = detect_crash(rob, input, last_position)
         positions.append(last_position)
 
+        rob_pos = rob.position()[:2]
+        prey_pos = prey_robot.position()[:2]
+        dist += np.linalg.norm(rob_pos - prey_pos)
+
         obj_seen = not np.array_equal(food, np.array((0, 0, 1)))
         print('Object seen: {}'.format(obj_seen))
 
@@ -135,7 +160,7 @@ def eval(x):
     collected_food = float(rob.collected_food())
     print("final fitness: {}".format(fitness))
     food_factor = collected_food / max_food
-    fitness_final = food_factor * fitness
+    fitness_final = 1/dist * fitness
 
     # fitness += 100 * collected_food
     # fitness_final = fitness
