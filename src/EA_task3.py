@@ -35,7 +35,7 @@ activation = 'tanh'
 n_hidden_neurons = 5
 num_sensors = 3 + 3 + 3 + 3 + 3
 n_out = 2
-step_size_ms = 800
+step_size_ms = 400
 sim_length_s = 45.0
 max_food = 7.0
 collected_food = 0.0
@@ -69,7 +69,7 @@ else:
     # prey_robot = robobo.SimulationRoboboPrey().connect(address='172.20.10.1', port=19989)
     prey_robot = robobo.SimulationRoboboPrey().connect(address='192.168.1.70', port=19989)
 
-    prey_controller = prey.Prey(robot=prey_robot, level=3)
+    prey_controller = prey.Prey(robot=prey_robot, level=2)
 
     # time.sleep(5)
     prey_controller.start()
