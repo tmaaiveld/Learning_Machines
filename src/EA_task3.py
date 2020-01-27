@@ -24,7 +24,7 @@ from camera import Camera
 hardware = False
 port = 19997
 kill_on_crash = False
-base_name = "experiments/test_food_foraging"
+base_name = "experiments/test_predator"
 full_speed = 40
 if kill_on_crash:
     base_name += "_killoncrash"
@@ -32,21 +32,24 @@ base_name += "_port" + str(port)
 penalize_backwards = False
 activation = 'tanh'
 
-n_hidden_neurons = 0
-num_sensors = 3 + 3
+n_hidden_neurons = 5
+num_sensors = 3 + 3 + 3 + 3 + 3
 n_out = 2
 step_size_ms = 400
 sim_length_s = 200.0
 max_food = 7.0
 collected_food = 0.0
 sensitivity = 30
-n_vars = (num_sensors + 1) * n_out  # Simple perceptron
-# n_vars = (num_sensors()+1)*10 + 11*5  # multilayer with 10 neurons
+#n_vars = (num_sensors + 1) * n_out  # Simple perceptron
+#n_vars = (num_sensors+1)*10 + 11*5
+
+# multilayer with 10 neurons
+n_vars = (num_sensors+1)*n_hidden_neurons + (n_hidden_neurons+1)*n_out
 
 dom_u = 1
 dom_l = -1
 npop = 10
-gens = 21
+gens = 10
 mutation = 0.1
 cross_prob = 0.5
 recovery_mode = False
@@ -98,7 +101,7 @@ def eval(x):
     positions = []
     last_position = np.array([0, 0, 0])
     sim_length_ms = sim_length_s * 1000
-    food_old = np.array((0, 0, 128))
+    food_old = np.array([(0, 0, 128),(0, 0, 128),(0, 0, 128),(0, 0, 128)])
 
     nn = player_controller(n_hidden_neurons, n_out)
 
@@ -115,13 +118,19 @@ def eval(x):
 
         print('food:')
         print(food)
-
         # new_input = 2.5 * (np.array(list(food_old) + list(food)))
-        new_input = (np.array(list(food_old) + list(food)))
-        new_input[0], new_input[3] = 2.*new_input[0], 2.*new_input[3]
-        # new_input[1], new_input[4] = 2.5 * new_input[1], 2.5 * new_input[4]
+
+        food_old = np.vstack([food, food_old[:4]])
+        print("food buffer:")
+        print(food_old)
+        new_input = food_old.ravel()
+
+	#new_input = (np.array(list(food_old) + list(food)))
+        #new_input[0], new_input[3] = 2.*new_input[0], 2.*new_input[3]
+
+	# new_input[1], new_input[4] = 2.5 * new_input[1], 2.5 * new_input[4]
         # time.sleep(1)
-        print('inputs: \n{}'.format(new_input.reshape((2,3))))
+#        print('inputs: \n{}'.format(new_input.reshape((2,3))))
 
         # collected_food = rob.collected_food()
         # print('food collected', collected_food)
