@@ -35,8 +35,8 @@ activation = 'tanh'
 n_hidden_neurons = 5
 num_sensors = 3 + 3 + 3 + 3 + 3
 n_out = 2
-step_size_ms = 400
-sim_length_s = 200.0
+step_size_ms = 800
+sim_length_s = 45.0
 max_food = 7.0
 collected_food = 0.0
 sensitivity = 30
@@ -61,15 +61,28 @@ if hardware:
     # time.sleep(5)
 else:
     #145.108.65.66
-    rob = robobo.SimulationRobobo().connect(address='172.17.0.1', port=port)  # 19997
+    # rob = robobo.SimulationRobobo().connect(address='172.20.10.1', port=port)  # 19997
+    rob = robobo.SimulationRobobo().connect(address='192.168.1.70', port=port)  # 19997
 
+    rob.play_simulation()
+
+    # prey_robot = robobo.SimulationRoboboPrey().connect(address='172.20.10.1', port=19989)
+    prey_robot = robobo.SimulationRoboboPrey().connect(address='192.168.1.70', port=19989)
+
+    prey_controller = prey.Prey(robot=prey_robot, level=3)
+
+    # time.sleep(5)
+    prey_controller.start()
+
+    # time.sleep(2)
+
+
+    # rob.stop_world()
+    # time.sleep(10)
     # rob.play_simulation()
 
-    prey_robot = robobo.SimulationRoboboPrey().connect(address='172.17.0.1', port=19989)
-
-    prey_controller = prey.Prey(robot=prey_robot, level=2)
-
-    # prey_controller.start()
+    # time.sleep(5)
+    print(prey_robot.position())
 
     rob.set_phone_tilt(120, 4.0)
     time.sleep(5)
@@ -81,17 +94,16 @@ def eval(x):
     global experiment_name
     global gen
     print("starting evaluation")
-    if not hardware:
-        rob.stop_world()
+
     #	time.sleep(0.1)
     signal.signal(signal.SIGINT, terminate_program)
     # start_simulation(rob)
     #	time.sleep(2)
     if not hardware:
-        rob.play_simulation()
+        # rob.play_simulation()
         # TODO: Not sure if this or in the beginning is the appropriate place to start
-        prey_controller.start()
-        rob.set_phone_tilt(119.75, 1.0)  # tilting didn't seem to make sense in the simulation
+        # prey_controller.start()
+        rob.set_phone_tilt(119.75, 1.0)
     else:
         rob.set_phone_tilt(90, 4.0)
         time.sleep(5)
@@ -120,7 +132,6 @@ def eval(x):
 
         print('food:')
         print(food)
-        # new_input = 2.5 * (np.array(list(food_old) + list(food)))
 
         food_old = np.vstack([food, food_old[:4]])
         print("food buffer:")
@@ -146,14 +157,16 @@ def eval(x):
         # crashed, last_position = detect_crash(rob, input, last_position)
         positions.append(last_position)
 
-        rob_pos = rob.position()[:2]
-        prey_pos = prey_robot.position()[:2]
+        rob_pos = np.array(rob.position()[:2])
+        prey_pos = np.array(prey_robot.position()[:2])
         dist += np.linalg.norm(rob_pos - prey_pos)
 
         obj_seen = not np.array_equal(food, np.array((0, 0, 1)))
         print('Object seen: {}'.format(obj_seen))
 
-        fitness += get_fitness_foraging(left, right, obj_seen)  # , input)
+        if sim_length_ms > 2000:
+            fitness += get_fitness_foraging(left, right, obj_seen)  # , input)
+
         print("Total Fitness: {0:.2f}".format(fitness))
 
         # if rob.collected_food() == 7:
@@ -162,25 +175,30 @@ def eval(x):
         # fitness += -1
 
         step += 1
+
+    rob.move(0,0,150)
+    time.sleep(2) # allow the prey to run for a bit
+
     print("Evaluation done, final fitness: {}".format(fitness))
     print("--------------------------")
 
     # Weigh fitness by collected food
-    collected_food = float(rob.collected_food())
+    # collected_food = float(rob.collected_food())
     print("final fitness: {}".format(fitness))
-    food_factor = collected_food / max_food
+    # food_factor = collected_food / max_food
     fitness_final = 1/dist * fitness
 
     # fitness += 100 * collected_food
     # fitness_final = fitness
 
-    if not hardware:
-        rob.stop_world()
+    # if not hardware:
+    #     rob.stop_world()
 
     print("Evaluation of the individual done")
     print("final fitness: {}".format(fitness))
     print("final food collected: {} of 7".format(collected_food))
-    print("food penalty factor: {}".format(food_factor))
+    print("total dist factor: 1 / {}".format(dist))
+    # print("food penalty factor: {}".format(food_factor))
     print("scaled fitness: {}".format(fitness_final))
 
     # np.savetxt(experiment_name_new+str(int(fitness))+".txt",np.array(x))
