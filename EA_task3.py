@@ -141,7 +141,7 @@ def eval(x):
         print("\nMovement:\nleft={}\nright={}".format(left, right))
         rob.move(left, right, step_size_ms)
         # time.sleep(250.0/1000.0)
-        food_old = food
+        # food_old = food
         elapsed_time += step_size_ms
         # crashed, last_position = detect_crash(rob, input, last_position)
         positions.append(last_position)
