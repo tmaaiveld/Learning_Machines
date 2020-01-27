@@ -32,7 +32,7 @@ base_name += "_port" + str(port)
 penalize_backwards = False
 activation = 'tanh'
 
-n_hidden_neurons = 10
+n_hidden_neurons = 5
 num_sensors = 3 + 3 + 3 + 3 + 3
 n_out = 2
 step_size_ms = 400
@@ -101,7 +101,7 @@ def eval(x):
     positions = []
     last_position = np.array([0, 0, 0])
     sim_length_ms = sim_length_s * 1000
-    food_old = np.array((0, 0, 128))
+    food_old = np.array([(0, 0, 128),(0, 0, 128),(0, 0, 128),(0, 0, 128)])
 
     nn = player_controller(n_hidden_neurons, n_out)
 
@@ -120,9 +120,14 @@ def eval(x):
         print(food)
 
         # new_input = 2.5 * (np.array(list(food_old) + list(food)))
-        new_input = (np.array(list(food_old) + list(food)))
-        new_input[0], new_input[3] = 2.*new_input[0], 2.*new_input[3]
-        # new_input[1], new_input[4] = 2.5 * new_input[1], 2.5 * new_input[4]
+
+        food_old = np.vstack([food, food_old[:4]])
+        new_input = food_old.ravel()
+
+	#new_input = (np.array(list(food_old) + list(food)))
+        #new_input[0], new_input[3] = 2.*new_input[0], 2.*new_input[3]
+
+	# new_input[1], new_input[4] = 2.5 * new_input[1], 2.5 * new_input[4]
         # time.sleep(1)
         print('inputs: \n{}'.format(new_input.reshape((2,3))))
 
