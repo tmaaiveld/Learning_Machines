@@ -24,7 +24,7 @@ from camera import Camera
 hardware = False
 port = 19997
 kill_on_crash = False
-base_name = "experiments/perceptron_predator"
+base_name = "src/119.json"
 full_speed = 40
 if kill_on_crash:
     base_name += "_killoncrash"
@@ -36,7 +36,7 @@ n_hidden_neurons = 0
 num_sensors = 3 + 3 #+ 3 + 3 + 3
 n_out = 2
 step_size_ms = 400
-sim_length_s = 45.0
+sim_length_s = 75.0
 max_food = 7.0
 collected_food = 0.0
 sensitivity = 30
@@ -118,7 +118,7 @@ def eval(x):
 
         image = rob.get_image_front()
         img = Camera(image)
-        food = np.array(img.capture_prey_image(sensitivity, step))
+        food = np.array(img.capture_prey_image())
 
         print('food:')
         print(food)

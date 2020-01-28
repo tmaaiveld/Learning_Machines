@@ -2,6 +2,7 @@
 import sys
 from deap import creator, base, tools, algorithms
 from controller import Controller
+from camera import Camera
 
 # imports other libs
 from numpy import inf
@@ -13,14 +14,11 @@ import os
 import json
 import codecs
 import signal
+import prey
 
 np.set_printoptions(suppress=True, formatter={'float_kind': '{:0.2f}'.format})
 
-from camera import Camera
-
-# import imutils
-
-hardware = True
+hardware = False
 port = 19997
 kill_on_crash = False
 base_name = "experiments/test_food_foraging"
@@ -30,13 +28,13 @@ if kill_on_crash:
 base_name += "_port" + str(port)
 penalize_backwards = False
 activation = 'tanh'
-brain="src/115.json"
+brain = "src/119.json"
 
 n_hidden_neurons = 0
 num_sensors = 3 + 3
 n_out = 2
 step_size_ms = 400
-sim_length_s = 200.0
+sim_length_s = 1000.0
 max_food = 7.0
 collected_food = 0.0
 sensitivity = 30
@@ -50,12 +48,34 @@ gens = 21
 mutation = 0.
 cross_prob = 0.
 recovery_mode = False
+task = 'prey' # 'food', 'avoid'
+
+if hardware:
+    rob = robobo.HardwareRobobo(camera=True).connect(address="10.15.3.52")
+
+    rob.set_phone_tilt(90, 4.0)
+    time.sleep(5)
+
+else:
+    #145.108.65.66
+    # rob = robobo.SimulationRobobo().connect(address='172.20.10.1', port=port)  # 19997
+    rob = robobo.SimulationRobobo().connect(address='192.168.1.70', port=port)  # 19997
+
+    rob.play_simulation()
+
+    # prey_robot = robobo.SimulationRoboboPrey().connect(address='172.20.10.1', port=19989)
+    prey_robot = robobo.SimulationRoboboPrey().connect(address='192.168.1.70', port=19989)
+
+    prey_controller = prey.Prey(robot=prey_robot, level=2)
+
+    prey_controller.start()
+
+    # print(prey_robot.position())
+
+    rob.set_phone_tilt(119.75, 4.0)
+    time.sleep(5)
 
 
-rob = robobo.HardwareRobobo(camera=True).connect(address="10.15.3.52")
-
-rob.set_phone_tilt(90, 4.0)
-time.sleep(5)
 
 with open(brain, "r") as f:
     x=json.load(f)
@@ -135,21 +155,22 @@ step = 0
 while True:
     image = rob.get_image_front()
     img = Camera(image)
-    food = np.array(img.capture_food_image(sensitivity, step))
 
-    print('food:')
+    if task is 'avoid':
+        raise NotImplementedError('inputs for avoid go here')
+    elif task is 'food':
+        food = np.array(img.capture_food_image(sensitivity, step))
+    elif task is 'prey':
+        food = np.array(img.capture_prey_image())
+
+    print('input:')
     print(food)
 
-    # new_input = 2.5 * (np.array(list(food_old) + list(food)))
-
     new_input = (np.array(list(food_old) + list(food)))
-    new_input[0], new_input[3] = 2. * new_input[0], 2. * new_input[3]  # scale left screen distance
-    new_input[1], new_input[4] = 4. * new_input[1], 4. * new_input[4]  # scale right screen distance
+    # new_input[0], new_input[3] = 2. * new_input[0], 2. * new_input[3]  # scale left screen distance
+    # new_input[1], new_input[4] = 4. * new_input[1], 4. * new_input[4]  # scale right screen distance
     # time.sleep(1)
     print('inputs: \n{}'.format(new_input.reshape((2, 3))))
-
-    # collected_food = rob.collected_food()
-    # print('food collected', collected_food)
 
     left, right = nn.control(new_input, np.array(x))
     print("\nMovement:\nleft={}\nright={}".format(left, right))
