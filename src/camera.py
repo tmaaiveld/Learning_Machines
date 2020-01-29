@@ -56,7 +56,7 @@ class Camera:
         x = 0  # bigger it is, more central it is, smaller, more off
         y = None
         neg_x = 0  #129  # bigger it is, more central it is, smaller, more off
-        neg_y = 640  # --> smaller, more desirable
+        neg_y = y_ax  # --> smaller, more desirable
 
         if self.contours:
             # x,y is top left coordinate of rectangle
@@ -150,7 +150,7 @@ class Camera:
         x = 0  # bigger it is, more central it is, smaller, more off
         y = None
         neg_x = 0  #129  # bigger it is, more central it is, smaller, more off
-        neg_y = 640  # --> smaller, more desirable
+        neg_y = y_ax  # --> smaller, more desirable
 
         if self.contours:
             # x,y is top left coordinate of rectangle
@@ -311,7 +311,3 @@ class Camera:
     #     wall_detection = np.all(img_gray>207)
     #
     #     return wall_detection
-
-
-
-

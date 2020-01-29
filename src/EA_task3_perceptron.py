@@ -24,7 +24,7 @@ from camera import Camera
 hardware = False
 port = 19997
 kill_on_crash = False
-base_name = "experiments/test_predator"
+base_name = "experiments/perceptron_predator"
 full_speed = 40
 if kill_on_crash:
     base_name += "_killoncrash"
@@ -32,7 +32,7 @@ base_name += "_port" + str(port)
 penalize_backwards = False
 activation = 'tanh'
 
-n_hidden_neurons = 5
+n_hidden_neurons = 0
 num_sensors = 3 + 3 + 3 + 3 + 3
 n_out = 2
 step_size_ms = 400
@@ -40,10 +40,10 @@ sim_length_s = 45.0
 max_food = 7.0
 collected_food = 0.0
 sensitivity = 30
-#n_vars = (num_sensors + 1) * n_out  # Simple perceptron
+n_vars = (num_sensors + 1) * n_out  # Simple perceptron
 
 # multilayer with 10 neurons
-n_vars = (num_sensors+1)*n_hidden_neurons + (n_hidden_neurons+1)*n_out
+#n_vars = (num_sensors+1)*n_hidden_neurons + (n_hidden_neurons+1)*n_out
 
 dom_u = 1
 dom_l = -1
@@ -160,9 +160,9 @@ def eval(x):
     print("--------------------------")
 
     # Weigh fitness by collected food
-    collected_food = float(rob.collected_food())
+#    collected_food = float(rob.collected_food())
     print("final fitness: {}".format(fitness))
-    food_factor = collected_food / max_food
+#    food_factor = collected_food / max_food
     fitness_final = 1/dist * fitness
 
     # fitness += 100 * collected_food
@@ -173,8 +173,8 @@ def eval(x):
 
     print("Evaluation of the individual done")
     print("final fitness: {}".format(fitness))
-    print("final food collected: {} of 7".format(collected_food))
-    print("food penalty factor: {}".format(food_factor))
+#    print("final food collected: {} of 7".format(collected_food))
+#    print("food penalty factor: {}".format(food_factor))
     print("scaled fitness: {}".format(fitness_final))
 
     # np.savetxt(experiment_name_new+str(int(fitness))+".txt",np.array(x))
