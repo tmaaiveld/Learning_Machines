@@ -89,6 +89,13 @@ def eval(x):
 
     #	time.sleep(0.1)
     signal.signal(signal.SIGINT, terminate_program)
+    # TODO: not sure if this works
+    prey_controller.stop()
+    prey_controller.join()
+    prey_robot.disconnect()
+    rob.stop_world()
+    rob.play_simulation()
+    prey_controller.start()
     # start_simulation(rob)
     #	time.sleep(2)
     # if not hardware:
@@ -149,9 +156,11 @@ def eval(x):
         elapsed_time += step_size_ms
         # crashed, last_position = detect_crash(rob, input, last_position)
         positions.append(last_position)
-
-        rob_pos = np.array(rob.position()[:2])
-        prey_pos = np.array(prey_robot.position()[:2])
+        try:
+            rob_pos = np.array(rob.position()[:2])
+            prey_pos = np.array(prey_robot.position()[:2])
+        except:
+            print("Computer says no :(")
         dist = np.linalg.norm(rob_pos - prey_pos)
         print('dist:')
         print(dist)
