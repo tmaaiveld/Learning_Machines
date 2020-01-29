@@ -172,7 +172,7 @@ def eval(x):
         print('Object seen: {}'.format(obj_seen))
 
         if sim_length_ms > 2000:
-            fitness += get_fitness_foraging(left, right, obj_seen, n_objects)  # , input)
+            fitness += get_fitness_foraging(left, right, obj_seen, n_objects, dist)  # , input)
 
         print("Total Fitness: {0:.2f}".format(fitness))
 
@@ -263,8 +263,8 @@ def get_fitness(left, right, input):
     return fit
 
 
-def get_fitness_foraging(left, right, obj_seen, n_objects):
-    s_trans = (left + right) / (2 * full_speed)
+def get_fitness_foraging(left, right, obj_seen, n_objects, dist):
+    s_trans = (abs(right) + abs(left)) / (2 * full_speed)
     rot_max = 2 * full_speed  # from (0,20)
     rot_min = 0  # (30,30)
     # Normalized rotation
@@ -278,9 +278,9 @@ def get_fitness_foraging(left, right, obj_seen, n_objects):
     #	print("v_sens "+str(v_sens))
 
     if obj_seen:
-        fit = s_trans * (1 - s_rot) * n_objects
+        fit = (1/dist) * s_trans * (1 - s_rot) * n_objects
     else:
-        fit = s_rot * (1 - s_trans)
+        fit = (1/dist) * s_rot * (1 - s_trans)
 
     print("total: " + str(fit))
     print("")
