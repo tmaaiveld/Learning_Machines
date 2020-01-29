@@ -89,7 +89,7 @@ class Camera:
 
         return x/x_ax, neg_x/x_ax, neg_y/y_ax
 
-    def capture_prey_image(self, sens_bound, step):
+    def capture_prey_image(self):
         self.hsv = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
 
         # define range of red color in HSV

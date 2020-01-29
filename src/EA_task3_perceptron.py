@@ -1,3 +1,5 @@
+# pip install deap; pip install imutils; python src/EA_task3_perceptron.py
+
 # imports framework
 import sys
 from deap import creator, base, tools, algorithms
@@ -24,7 +26,7 @@ from camera import Camera
 hardware = False
 port = 19997
 kill_on_crash = False
-base_name = "experiments/perceptron_predator"
+base_name = "experiments/test_predator"
 full_speed = 40
 if kill_on_crash:
     base_name += "_killoncrash"
@@ -33,10 +35,10 @@ penalize_backwards = False
 activation = 'tanh'
 
 n_hidden_neurons = 0
-num_sensors = 3 + 3 + 3 + 3 + 3
+num_sensors = 3 + 3 #+ 3 + 3 + 3
 n_out = 2
 step_size_ms = 400
-sim_length_s = 45.0
+sim_length_s = 75.0
 max_food = 7.0
 collected_food = 0.0
 sensitivity = 30
@@ -60,35 +62,50 @@ if hardware:
     # time.sleep(5)
 else:
     #145.108.65.66
-    rob = robobo.SimulationRobobo().connect(address='172.17.0.1', port=port)  # 19997
+    # rob = robobo.SimulationRobobo().connect(address='172.20.10.1', port=port)  # 19997
+    rob = robobo.SimulationRobobo().connect(address='192.168.1.70', port=port)  # 19997
 
     rob.play_simulation()
 
-    prey_robot = robobo.SimulationRoboboPrey().connect(address='172.17.0.1', port=19989)
+    # prey_robot = robobo.SimulationRoboboPrey().connect(address='172.20.10.1', port=19989)
+    prey_robot = robobo.SimulationRoboboPrey().connect(address='192.168.1.70', port=19989)
 
     prey_controller = prey.Prey(robot=prey_robot, level=2)
 
     prey_controller.start()
 
-    rob.set_phone_tilt(119.75, 1.0)  # tilting didn't seem to make sense in the simulation
+    print(prey_robot.position())
+
+    rob.set_phone_tilt(119.75, 4.0)
+    time.sleep(5)
+
+
 
 
 def eval(x):
     global experiment_name
     global gen
     print("starting evaluation")
-#    if not hardware:
-#        rob.stop_world()
+
     #	time.sleep(0.1)
-#    signal.signal(signal.SIGINT, terminate_program)
+    signal.signal(signal.SIGINT, terminate_program)
+    # TODO: not sure if this works
+    prey_controller.stop()
+    prey_controller.join()
+    prey_robot.disconnect()
+    rob.stop_world()
+    rob.play_simulation()
+    prey_controller.start()
     # start_simulation(rob)
     #	time.sleep(2)
-#    if not hardware:
-#        rob.play_simulation()
-#    rob.set_phone_tilt(119.75, 1.0)  # tilting didn't seem to make sense in the simulation
-#    else:
-#        rob.set_phone_tilt(90, 4.0)
-#        time.sleep(5)
+    # if not hardware:
+    #     # rob.play_simulation()
+    #     # TODO: Not sure if this or in the beginning is the appropriate place to start
+    #     # prey_controller.start()
+    #     rob.set_phone_tilt(119.75, 1.0)
+    # else:
+    #     rob.set_phone_tilt(90, 4.0)
+    #     time.sleep(5)
 
     #	time.sleep(2)
 
@@ -97,12 +114,12 @@ def eval(x):
     positions = []
     last_position = np.array([0, 0, 0])
     sim_length_ms = sim_length_s * 1000
-    food_old = np.array([(0, 0, 128),(0, 0, 128),(0, 0, 128),(0, 0, 128)])
+    food_old = np.array([[0,0,1], [0,0,1]])
 
     nn = player_controller(n_hidden_neurons, n_out)
 
     step = 0
-    dist = 0
+
     while sim_length_ms > elapsed_time:
         print("\n--------------------------\nElapsed time: " + str(elapsed_time) + "\n")
         # input = np.log(rob.read_irs()).astype(float)
@@ -110,13 +127,13 @@ def eval(x):
 
         image = rob.get_image_front()
         img = Camera(image)
-        food = np.array(img.capture_prey_image(sensitivity, step))
+        food = np.array(img.capture_prey_image())
 
         print('food:')
         print(food)
         # new_input = 2.5 * (np.array(list(food_old) + list(food)))
 
-        food_old = np.vstack([food, food_old[:4]])
+        food_old = np.vstack([food, food_old[0]])
         print("food buffer:")
         print(food_old)
         new_input = food_old.ravel()
@@ -139,15 +156,21 @@ def eval(x):
         elapsed_time += step_size_ms
         # crashed, last_position = detect_crash(rob, input, last_position)
         positions.append(last_position)
-
-        rob_pos = np.array(rob.position()[:2])
-        prey_pos = np.array(prey_robot.position()[:2])
-        dist += np.linalg.norm(rob_pos - prey_pos)
+        try:
+            rob_pos = np.array(rob.position()[:2])
+            prey_pos = np.array(prey_robot.position()[:2])
+        except:
+            print("Computer says no :(")
+        dist = np.linalg.norm(rob_pos - prey_pos)
+        print('dist:')
+        print(dist)
 
         obj_seen = not np.array_equal(food, np.array((0, 0, 1)))
         print('Object seen: {}'.format(obj_seen))
 
-        fitness += get_fitness_foraging(left, right, obj_seen)  # , input)
+        if sim_length_ms > 2000:
+            fitness += get_fitness_foraging(left, right, obj_seen, dist)  # , input)
+
         print("Total Fitness: {0:.2f}".format(fitness))
 
         # if rob.collected_food() == 7:
@@ -161,15 +184,18 @@ def eval(x):
 
     # Weigh fitness by collected food
 #    collected_food = float(rob.collected_food())
-    print("final fitness: {}".format(fitness))
+    print("fitness: {}".format(fitness))
+    print("dist: {}".format(fitness))
 #    food_factor = collected_food / max_food
-    fitness_final = 1/dist * fitness
+#     fitness_final = (150./dist) * fitness
+
+    fitness_final = fitness * 100
 
     # fitness += 100 * collected_food
     # fitness_final = fitness
 
-    if not hardware:
-        rob.stop_world()
+    # if not hardware:
+    #     rob.stop_world()
 
     print("Evaluation of the individual done")
     print("final fitness: {}".format(fitness))
@@ -178,17 +204,17 @@ def eval(x):
     print("scaled fitness: {}".format(fitness_final))
 
     # np.savetxt(experiment_name_new+str(int(fitness))+".txt",np.array(x))
-    json_file = experiment_name_new + str(int(fitness)) + ".json"
+    json_file = experiment_name_new + str(int(fitness_final)) + ".json"
     i = 0
 
     while os.path.exists(json_file):
         i += 1
-        json_file = experiment_name_new + str(int(fitness + i)) + ".json"
-        print("Renaming duplicate: {}".format(fitness))
+        json_file = experiment_name_new + str(int(fitness_final + i)) + ".json"
+        print("Renaming duplicate: {}".format(fitness_final))
 
     json.dump(x, codecs.open(json_file, "w", encoding="utf-8"), indent=4)
     file_fit = open(experiment_name + 'results.txt', 'a')
-    file_fit.write('\n' + str(gen) + ' ' + str(round(fitness, 6)))
+    file_fit.write('\n' + str(gen) + ' ' + str(round(fitness_final, 6)))
     file_fit.close()
     file_pos = open(experiment_name + 'positions.txt', 'a')
     file_pos.write('\n' + str(gen) + ' ' + str(positions))
@@ -230,7 +256,7 @@ def get_fitness(left, right, input):
     return fit
 
 
-def get_fitness_foraging(left, right, obj_seen):
+def get_fitness_foraging(left, right, obj_seen, dist):
     s_trans = (left + right) / (2 * full_speed)
     rot_max = 2 * full_speed  # from (0,20)
     rot_min = 0  # (30,30)
@@ -245,9 +271,9 @@ def get_fitness_foraging(left, right, obj_seen):
     #	print("v_sens "+str(v_sens))
 
     if obj_seen:
-        fit = s_trans * (1 - s_rot)
+        fit = (1/dist) * s_trans * (1 - s_rot)
     else:
-        fit = s_rot * (1 - s_trans)
+        fit = 0
 
     print("total: " + str(fit))
     print("")
@@ -324,6 +350,8 @@ class player_controller(Controller):
         print("OUT::\n" + str(output))
         print("OUT RAW::\n" + str(out))
         # takes decisions about robobos actions
+
+        output = np.array([v if v > -0.5 else -0.5 for v in output])  # clip negative speeds to -0.5 to stop speedturning
         left = full_speed * output[0]
         right = full_speed * output[1]
 
