@@ -1,3 +1,5 @@
+# pip install deap; pip install imutils; python src/EA_task3_perceptron.py
+
 # imports framework
 import sys
 from deap import creator, base, tools, algorithms
@@ -24,7 +26,7 @@ from camera import Camera
 hardware = False
 port = 19997
 kill_on_crash = False
-base_name = "src/119.json"
+base_name = "experiments/test_predator"
 full_speed = 40
 if kill_on_crash:
     base_name += "_killoncrash"
@@ -110,7 +112,7 @@ def eval(x):
     nn = player_controller(n_hidden_neurons, n_out)
 
     step = 0
-    dist = 0
+
     while sim_length_ms > elapsed_time:
         print("\n--------------------------\nElapsed time: " + str(elapsed_time) + "\n")
         # input = np.log(rob.read_irs()).astype(float)
@@ -150,7 +152,7 @@ def eval(x):
 
         rob_pos = np.array(rob.position()[:2])
         prey_pos = np.array(prey_robot.position()[:2])
-        dist += np.linalg.norm(rob_pos - prey_pos)
+        dist = np.linalg.norm(rob_pos - prey_pos)
         print('dist:')
         print(dist)
 
@@ -158,7 +160,7 @@ def eval(x):
         print('Object seen: {}'.format(obj_seen))
 
         if sim_length_ms > 2000:
-            fitness += get_fitness_foraging(left, right, obj_seen)  # , input)
+            fitness += get_fitness_foraging(left, right, obj_seen, dist)  # , input)
 
         print("Total Fitness: {0:.2f}".format(fitness))
 
@@ -176,7 +178,9 @@ def eval(x):
     print("fitness: {}".format(fitness))
     print("dist: {}".format(fitness))
 #    food_factor = collected_food / max_food
-    fitness_final = (150./dist) * fitness
+#     fitness_final = (150./dist) * fitness
+
+    fitness_final = fitness * 100
 
     # fitness += 100 * collected_food
     # fitness_final = fitness
@@ -243,7 +247,7 @@ def get_fitness(left, right, input):
     return fit
 
 
-def get_fitness_foraging(left, right, obj_seen):
+def get_fitness_foraging(left, right, obj_seen, dist):
     s_trans = (left + right) / (2 * full_speed)
     rot_max = 2 * full_speed  # from (0,20)
     rot_min = 0  # (30,30)
@@ -258,9 +262,9 @@ def get_fitness_foraging(left, right, obj_seen):
     #	print("v_sens "+str(v_sens))
 
     if obj_seen:
-        fit = s_trans * (1 - s_rot)
+        fit = (1/dist) * s_trans * (1 - s_rot)
     else:
-        fit = s_rot * (1 - s_trans)
+        fit = 0
 
     print("total: " + str(fit))
     print("")
@@ -337,6 +341,8 @@ class player_controller(Controller):
         print("OUT::\n" + str(output))
         print("OUT RAW::\n" + str(out))
         # takes decisions about robobos actions
+
+        output = np.array([v if v > -0.5 else -0.5 for v in output])  # clip negative speeds to -0.5 to stop speedturning
         left = full_speed * output[0]
         right = full_speed * output[1]
 
