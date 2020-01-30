@@ -21,14 +21,14 @@ np.set_printoptions(suppress=True, formatter={'float_kind': '{:0.2f}'.format})
 hardware = False
 port = 19997
 kill_on_crash = False
-base_name = "experiments/test_food_foraging"
-full_speed = 80
+base_name = "experiments/test_predator"
+full_speed = 40
 if kill_on_crash:
     base_name += "_killoncrash"
 base_name += "_port" + str(port)
 penalize_backwards = False
 activation = 'tanh'
-brain = "src/119.json"
+brain = "experiments/test_predator_port19997_Tournament/gen_6/6420.json"
 
 n_hidden_neurons = 0
 num_sensors = 3 + 3
