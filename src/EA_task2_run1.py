@@ -20,10 +20,11 @@ from camera import Camera
 
 # import imutils
 
-hardware = True
-port = 19997
+hardware = False
+run = 1
+port = 19998 - run
 kill_on_crash = False
-base_name = "experiments/test_food_foraging"
+base_name = "experiments/test_food_foraging_run{}".format(run)
 full_speed = 40
 if kill_on_crash:
     base_name += "_killoncrash"
@@ -32,29 +33,29 @@ penalize_backwards = False
 activation = 'tanh'
 
 n_hidden_neurons = 0
-num_sensors = 3 + 3
+num_sensors = 3 + 3 #+ 3 + 3 + 3
 n_out = 2
 step_size_ms = 400
-sim_length_s = 200.0
+sim_length_s = 90.0
 max_food = 7.0
 collected_food = 0.0
 sensitivity = 30
 n_vars = (num_sensors + 1) * n_out  # Simple perceptron
-# n_vars = (num_sensors()+1)*10 + 11*5  # multilayer with 10 neurons
 
 dom_u = 1
 dom_l = -1
 npop = 10
-gens = 21
-mutation = 0.
-cross_prob = 0.
+gens = 20
+mutation = 0.1
+cross_prob = 0.5
 recovery_mode = False
 
+print('port: {}'.format(port))
 if hardware:
     rob = robobo.HardwareRobobo(camera=True).connect(address="10.15.3.42")
 else:
-    rob = robobo.SimulationRobobo().connect(address='172.20.10.3', port=port)  # 19997
-
+    # rob = robobo.SimulationRobobo().connect(address='172.20.10.3', port=port)  # 19997
+    rob = robobo.SimulationRobobo().connect(address='192.168.1.70', port=port)  # 19997
 
 def eval(x):
     global experiment_name
@@ -80,12 +81,14 @@ def eval(x):
     positions = []
     last_position = np.array([0, 0, 0])
     sim_length_ms = sim_length_s * 1000
-    food_old = np.array((0, 0, 128))
+    food_old = np.array([[0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 0, 1]])
+    collected_food = rob.collected_food()
 
     nn = player_controller(n_hidden_neurons, n_out)
 
     step = 0
-    while sim_length_ms > elapsed_time:
+    while sim_length_ms > elapsed_time and collected_food is not 7:
+        start_time = time.time()
         print("\n--------------------------\nElapsed time: " + str(elapsed_time) + "\n")
         # input = np.log(rob.read_irs()).astype(float)
         # input[input == -inf] = 0.0
@@ -97,21 +100,17 @@ def eval(x):
         print('food:')
         print(food)
 
-        # new_input = 2.5 * (np.array(list(food_old) + list(food)))
-        new_input = (np.array(list(food_old) + list(food)))
-        new_input[0], new_input[3] = 2.*new_input[0], 2.*new_input[3]
-        # new_input[1], new_input[4] = 2.5 * new_input[1], 2.5 * new_input[4]
-        # time.sleep(1)
-        print('inputs: \n{}'.format(new_input.reshape((2,3))))
+        new_input = np.vstack([food, food_old[:num_sensors/3 - 1]])
+        print(new_input)
 
-        # collected_food = rob.collected_food()
-        # print('food collected', collected_food)
+        collected_food = rob.collected_food()
+        print('food collected', collected_food)
 
         left, right = nn.control(new_input, np.array(x))
         print("\nMovement:\nleft={}\nright={}".format(left, right))
         rob.move(left, right, step_size_ms)
         # time.sleep(250.0/1000.0)
-        food_old = food
+        food_old = new_input
         elapsed_time += step_size_ms
         # crashed, last_position = detect_crash(rob, input, last_position)
         positions.append(last_position)
@@ -122,45 +121,38 @@ def eval(x):
         fitness += get_fitness_foraging(left, right, obj_seen)  # , input)
         print("Total Fitness: {0:.2f}".format(fitness))
 
-        # if rob.collected_food() == 7:
-        #     break
-        #
-        # fitness += -1
-
         step += 1
+
     print("Evaluation done, final fitness: {}".format(fitness))
     print("--------------------------")
 
     # Weigh fitness by collected food
-    collected_food = float(rob.collected_food())
-    print("final fitness: {}".format(fitness))
     food_factor = collected_food / max_food
-    fitness_final = food_factor * fitness
-
-    # fitness += 100 * collected_food
-    # fitness_final = fitness
+    fitness_final = food_factor * fitness / step * 100
+    print("final fitness: {}".format(fitness_final))
 
     if not hardware:
         rob.stop_world()
 
     print("Evaluation of the individual done")
-    print("final fitness: {}".format(fitness))
+    print("fitness: {}".format(fitness))
     print("final food collected: {} of 7".format(collected_food))
     print("food penalty factor: {}".format(food_factor))
     print("scaled fitness: {}".format(fitness_final))
 
     # np.savetxt(experiment_name_new+str(int(fitness))+".txt",np.array(x))
-    json_file = experiment_name_new + str(int(fitness)) + ".json"
+    json_file = experiment_name_new + str(int(fitness_final)) + ".json"
     i = 0
 
     while os.path.exists(json_file):
         i += 1
-        json_file = experiment_name_new + str(int(fitness + i)) + ".json"
-        print("Renaming duplicate: {}".format(fitness))
+        json_file = experiment_name_new + str(int(fitness_final + i)) + ".json"
+        print("Renaming duplicate: {}".format(fitness_final))
 
     json.dump(x, codecs.open(json_file, "w", encoding="utf-8"), indent=4)
     file_fit = open(experiment_name + 'results.txt', 'a')
-    file_fit.write('\n' + str(gen) + ' ' + str(round(fitness, 6)))
+    file_fit.write('\n' + str(gen) + ' ' + str(round(fitness_final, 6))
+                   + ' ' + str(collected_food) + ' ' + str(step))
     file_fit.close()
     file_pos = open(experiment_name + 'positions.txt', 'a')
     file_pos.write('\n' + str(gen) + ' ' + str(positions))
@@ -219,7 +211,7 @@ def get_fitness_foraging(left, right, obj_seen):
     if obj_seen:
         fit = s_trans * (1 - s_rot)
     else:
-        fit = s_rot * (1 - s_trans)
+        fit = 0
 
     print("total: " + str(fit))
     print("")
@@ -257,13 +249,10 @@ class player_controller(Controller):
         self.n_out = _n_out
 
     def control(self, inputs, controller):
-        # Normalises the input using min-max scaling
-        #		inputs = (inputs - min(inputs)) / float((max(inputs) - min(inputs)))
-        #		print("Inputs NN:"+str(inputs))
+
+        inputs = inputs.flatten()
 
         if self.n_hidden[0] > 0:
-            # Preparing the weights and biases from the controller of layer 1
-
             # Biases for the n hidden neurons
             bias1 = controller[:self.n_hidden[0]].reshape(1, self.n_hidden[0])
             # Weights for the connections from the inputs to the hidden nodes
@@ -402,6 +391,10 @@ for selection in selections.keys():
             population = toolbox.select(population, k=npop - 1, tournsize=3)
 
         all_gens += population
+        print(all_gens)
+        for item in all_gens:
+            print(item.fitness.values)
+        quit()
         elite = tools.selBest(all_gens, k=1)
 
         population += elite
@@ -418,8 +411,8 @@ for selection in selections.keys():
 
         # saves results
         file_aux = open(experiment_name + 'results.txt', 'a')
-        print('\n GENERATION ' + str(gen) + ' ' + str(round(best_fit, 6)))
-        file_aux.write('\n' + str(gen) + ' ' + str(round(best_fit, 6)))
+        print('\n GENERATION ' + str(gen)) # + ' ' + str(round(best_fit, 6)))
+        # file_aux.write('\n' + str(gen) + ' ' + str(round(best_fit, 6)))
         file_aux.close()
 
 # with open(experiment_name + "logbook.pkl", "wb") as f:

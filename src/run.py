@@ -1,18 +1,12 @@
 # imports framework
-import sys
-from deap import creator, base, tools, algorithms
-from controller import Controller
-
-# imports other libs
-from numpy import inf
-import time
-import robobo
-import numpy as np
-import pickle as pkl
-import os
 import json
-import codecs
-import signal
+# imports other libs
+import time
+
+import numpy as np
+import robobo
+
+from controller import Controller
 
 np.set_printoptions(suppress=True, formatter={'float_kind': '{:0.2f}'.format})
 
